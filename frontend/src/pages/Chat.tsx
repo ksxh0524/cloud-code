@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom'
 import ConversationList from '../components/ConversationList'
 import NewConversationModal from '../components/NewConversationModal'
 import Terminal from '../components/Terminal'
+import { Conversation } from '../types'
 
 export default function Chat() {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [showSidebar, setShowSidebar] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
-  const [conversations, setConversations] = useState<any[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
 
   // 加载会话列表
   useEffect(() => {
@@ -30,12 +31,12 @@ export default function Chat() {
     const dirName = workDir.split('/').filter(Boolean).pop() || workDir
 
     // 检查已存在的同名会话，生成唯一名称
-    const sameDirConversations = conversations.filter((c: any) => c.workDir === workDir)
+    const sameDirConversations = conversations.filter((c: Conversation) => c.workDir === workDir)
     let conversationName = dirName
 
     if (sameDirConversations.length > 0) {
       let suffix = 1
-      while (sameDirConversations.some((c: any) => c.name === `${dirName}${suffix}`)) {
+      while (sameDirConversations.some((c: Conversation) => c.name === `${dirName}${suffix}`)) {
         suffix++
       }
       conversationName = `${dirName}${suffix}`
@@ -87,7 +88,8 @@ export default function Chat() {
               if (id === conversationId) {
                 setConversationId(null)
               }
-              window.location.reload()
+              // 使用状态更新而非页面刷新
+              setConversations(prev => prev.filter(c => c.id !== id))
             } catch (error) {
               console.error('Delete failed:', error)
             }
@@ -99,7 +101,8 @@ export default function Chat() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: newName })
               })
-              window.location.reload()
+              // 使用状态更新而非页面刷新
+              setConversations(prev => prev.map(c => c.id === id ? { ...c, name: newName } : c))
             } catch (error) {
               console.error('Rename failed:', error)
             }
@@ -123,7 +126,7 @@ export default function Chat() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>Cloud Code Terminal</span>
                 {(() => {
-                  const conv = conversations.find((c: any) => c.id === conversationId)
+                  const conv = conversations.find((c: Conversation) => c.id === conversationId)
                   if (conv) {
                     const isClaude = conv.cliType === 'claude'
                     return (
@@ -164,14 +167,15 @@ export default function Chat() {
               onClick={() => setShowNewModal(true)}
               style={{
                 marginTop: '20px',
-                padding: '12px 24px',
+                padding: '14px 28px',
                 background: '#3b82f6',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '16px',
                 cursor: 'pointer',
-                fontWeight: 500
+                fontWeight: 500,
+                minHeight: '48px'
               }}
             >
               + 新建对话
@@ -215,7 +219,7 @@ export default function Chat() {
 
         .new-chat-btn {
           flex: 1;
-          padding: 10px 12px;
+          padding: 12px;
           background: #f7f7f8;
           border: 1px solid #e5e5e5;
           border-radius: 6px;
@@ -223,10 +227,15 @@ export default function Chat() {
           font-size: 14px;
           cursor: pointer;
           transition: background 0.2s;
+          min-height: 44px;
         }
 
         .new-chat-btn:hover {
           background: #e8e8ea;
+        }
+
+        .new-chat-btn:active {
+          background: #d8d8da;
         }
 
         .close-sidebar {
@@ -237,6 +246,8 @@ export default function Chat() {
           color: #675676;
           cursor: pointer;
           padding: 8px;
+          min-width: 44px;
+          min-height: 44px;
         }
 
         .sidebar-footer {
@@ -248,12 +259,13 @@ export default function Chat() {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 10px 12px;
+          padding: 12px;
           color: #2e2e2e;
           text-decoration: none;
           border-radius: 6px;
           transition: background 0.2s;
           font-size: 14px;
+          min-height: 44px;
         }
 
         .settings-link:hover {
@@ -297,6 +309,8 @@ export default function Chat() {
           cursor: pointer;
           padding: 8px;
           color: #2e2e2e;
+          min-width: 44px;
+          min-height: 44px;
         }
 
         .chat-title {
@@ -330,6 +344,8 @@ export default function Chat() {
             bottom: 0;
             transition: left 0.3s ease;
             box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
           }
 
           .sidebar.open {
@@ -350,6 +366,10 @@ export default function Chat() {
 
           .menu-button {
             display: block;
+          }
+
+          .chat-header {
+            padding-top: max(16px, env(safe-area-inset-top));
           }
         }
       `}</style>

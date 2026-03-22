@@ -1,31 +1,34 @@
 """WebSocket Manager - manages WebSocket connections"""
 import asyncio
 import json
+import logging
 from typing import Dict, Set, Callable, Optional, Any
 from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
 
 
 class WebSocketManager:
     """WebSocket connection manager"""
-    
+
     def __init__(self):
         self._clients: Dict[str, Set[WebSocket]] = {}
         self._message_callbacks: Dict[str, Callable] = {}
-    
+
     def add_client(self, conversation_id: str, websocket: WebSocket):
         """Add a WebSocket client for a conversation"""
         if conversation_id not in self._clients:
             self._clients[conversation_id] = set()
         self._clients[conversation_id].add(websocket)
-        print(f"[WS] Client added for conversation: {conversation_id}")
-    
+        logger.info(f"Client added for conversation: {conversation_id}")
+
     def remove_client(self, conversation_id: str, websocket: WebSocket):
         """Remove a WebSocket client"""
         if conversation_id in self._clients:
             self._clients[conversation_id].discard(websocket)
             if len(self._clients[conversation_id]) == 0:
                 del self._clients[conversation_id]
-        print(f"[WS] Client removed for conversation: {conversation_id}")
+        logger.info(f"Client removed for conversation: {conversation_id}")
     
     def has_clients(self, conversation_id: str) -> bool:
         """Check if conversation has any clients"""
@@ -48,7 +51,7 @@ class WebSocketManager:
             try:
                 await ws.send_text(message)
             except Exception as e:
-                print(f"[WS] Failed to send message: {e}")
+                logger.warning(f"Failed to send message: {e}")
                 disconnected.append(ws)
         
         # Remove disconnected clients

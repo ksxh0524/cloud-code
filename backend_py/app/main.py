@@ -1,6 +1,7 @@
 """Main FastAPI Application"""
 import asyncio
 import json
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,19 +13,26 @@ from app.routers import web
 from app.services.ws_manager import ws_manager
 from app.services import cli_service
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO if not settings.debug else logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
     # Startup
-    print("📦 Initializing database...")
+    logger.info("Initializing database...")
     Base.metadata.create_all(bind=engine)
-    print("✅ Database initialized")
-    
+    logger.info("Database initialized")
+
     yield
-    
+
     # Shutdown
-    print("🛑 Shutting down...")
+    logger.info("Shutting down...")
 
 
 # Create FastAPI app
@@ -64,7 +72,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close()
         return
     
-    print(f"[WS] Connection opened for conversation: {conversation_id}")
+    logger.info(f"WebSocket connection opened for conversation: {conversation_id}")
     ws_manager.add_client(conversation_id, websocket)
     
     from app.database import SessionLocal
@@ -120,9 +128,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 cli_service.resize_session(conversation_id, rows, cols)
                 
     except WebSocketDisconnect:
-        print(f"[WS] Connection closed for conversation: {conversation_id}")
+        logger.info(f"WebSocket connection closed for conversation: {conversation_id}")
     except Exception as e:
-        print(f"[WS] Error: {e}")
+        logger.error(f"WebSocket error: {e}")
     finally:
         ws_manager.remove_client(conversation_id, websocket)
         

@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     
     # CLI
     default_cli_type: str = "claude"
-    
+    default_work_dir: Path = Path.home() / "codes"
+
     class Config:
         env_file = ".env"
 

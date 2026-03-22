@@ -1,12 +1,17 @@
 """CLI Service - manages PTY sessions for Claude/OpenCode"""
 import asyncio
-import pexpect
+import fcntl
+import logging
 import os
 import re
+import signal
+import time
+import pexpect
 from typing import Dict, Optional, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 
 CLI_COMMANDS = {
     'claude': ['claude'],
@@ -48,21 +53,30 @@ class Session:
     
     async def _read_output(self):
         """Read output from PTY"""
+        # Set non-blocking mode
+        fd = self.process.child_fd
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+        
         while self.process and self.process.isalive():
             try:
-                # Try to read with timeout
-                index = self.process.expect([r'.+', pexpect.TIMEOUT], timeout=0.1)
-                if index == 0:
-                    output = str(self.process.before) + str(self.process.after)
-                    if output and self.output_callback:
-                        await asyncio.get_event_loop().run_in_executor(
-                            None, self.output_callback, output
-                        )
-            except pexpect.TIMEOUT:
-                await asyncio.sleep(0.01)
+                # Try to read available data
+                try:
+                    data = os.read(fd, 4096)
+                    if data:
+                        output = data.decode('utf-8', errors='replace')
+                        if output and self.output_callback:
+                            # Call callback directly (it's already a coroutine)
+                            if asyncio.iscoroutinefunction(self.output_callback):
+                                await self.output_callback(output)
+                            else:
+                                self.output_callback(output)
+                except (OSError, IOError):
+                    # No data available
+                    await asyncio.sleep(0.01)
             except Exception as e:
-                print(f"[CLI:{self.cli_type}] Error reading output: {e}")
-                break
+                logger.error(f"Error reading output: {e}")
+                await asyncio.sleep(0.01)
     
     def send_input(self, data: str):
         """Send input to the CLI"""
@@ -85,18 +99,25 @@ class Session:
             try:
                 # Send Ctrl+D
                 self.process.sendcontrol('d')
-                # Wait briefly
-                import time
-                time.sleep(0.5)
-                
+                time.sleep(0.3)
+
                 if self.process.isalive():
-                    self.process.terminate()
-                    
-                if self.process.isalive():
-                    self.process.kill()
-                    
+                    # Terminate the process group to kill all child processes
+                    try:
+                        os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+                        time.sleep(0.3)
+                        
+                        if self.process.isalive():
+                            os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
+                    except Exception:
+                        # Fallback to normal termination
+                        self.process.terminate()
+                        time.sleep(0.3)
+                        if self.process.isalive():
+                            self.process.kill()
+                            
             except Exception as e:
-                print(f"[CLI:{self.cli_type}] Error stopping: {e}")
+                logger.error(f"Error stopping: {e}")
     
     @staticmethod
     def _filter_terminal_queries(data: str) -> str:
@@ -131,8 +152,8 @@ class CliService:
     def get_supported_cli_types(self):
         """Get supported CLI types"""
         return [
-            {'id': 'claude', 'name': 'Claude Code', 'command': 'claude'},
-            {'id': 'opencode', 'name': 'OpenCode', 'command': 'opencode'},
+            {'type': 'claude', 'name': 'Claude Code', 'description': 'Anthropic 官方 CLI 工具'},
+            {'type': 'opencode', 'name': 'OpenCode', 'description': '开源 AI 编程助手'},
         ]
     
     async def check_cli_installed(self, cli_type: str) -> dict:
@@ -162,7 +183,7 @@ class CliService:
         # Check if session exists and is running
         existing = self._sessions.get(conversation_id)
         if existing and existing.is_running():
-            print(f"[CLI:{cli_type}] Session {conversation_id} already running, reusing")
+            logger.info(f"Session {conversation_id} already running, reusing")
             if output_callback:
                 existing.output_callback = output_callback
             return True
@@ -172,8 +193,8 @@ class CliService:
             existing.stop()
             del self._sessions[conversation_id]
         
-        print(f"[CLI:{cli_type}] Starting session {conversation_id} in {work_dir}")
-        
+        logger.info(f"Starting session {conversation_id} in {work_dir}")
+
         # Create new session
         session = Session(
             conversation_id=conversation_id,
@@ -197,7 +218,7 @@ class CliService:
         """Stop a session"""
         session = self._sessions.get(conversation_id)
         if session:
-            print(f"[CLI] Stopping session {conversation_id}")
+            logger.info(f"Stopping session {conversation_id}")
             session.stop()
             del self._sessions[conversation_id]
     

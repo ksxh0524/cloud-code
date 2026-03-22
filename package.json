@@ -3,17 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "backend",
-    "frontend",
-    "shared"
+    "frontend"
   ],
   "scripts": {
-    "dev": "concurrently \"pnpm --filter backend dev\" \"pnpm --filter frontend dev\"",
-    "build": "pnpm --filter backend build && pnpm --filter frontend build",
-    "start": "pnpm --filter backend start"
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm --filter frontend build",
+    "lint": "eslint frontend/src --ext .ts,.tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "eslint frontend/src --ext .ts,.tsx --fix",
+    "format": "prettier --write \"frontend/src/**/*.{ts,tsx,css,json}\"",
+    "format:check": "prettier --check \"frontend/src/**/*.{ts,tsx,css,json}\"",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "concurrently": "^8.2.2"
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react": "^7.35.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "prettier": "^3.3.0"
   }
 }
