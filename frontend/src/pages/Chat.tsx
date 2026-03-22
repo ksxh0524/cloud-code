@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import ConversationList from '../components/ConversationList'
 import NewConversationModal from '../components/NewConversationModal'
 import Terminal from '../components/Terminal'
+import MobileTerminal from '../components/MobileTerminal'
 import { Conversation } from '../types'
 
 export default function Chat() {
@@ -10,6 +11,26 @@ export default function Chat() {
   const [showSidebar, setShowSidebar] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
   const [conversations, setConversations] = useState<Conversation[]>([])
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detect mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // Read conversationId from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const convId = params.get('conv')
+    if (convId) {
+      setConversationId(convId)
+    }
+  }, [])
 
   // 加载会话列表
   useEffect(() => {
@@ -66,7 +87,10 @@ export default function Chat() {
 
       <aside className={`sidebar ${showSidebar ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <button onClick={() => setShowNewModal(true)} className="new-chat-btn">
+          <button onClick={() => {
+            setShowNewModal(true)
+            setShowSidebar(false)
+          }} className="new-chat-btn">
             + 新建对话
           </button>
           <button className="close-sidebar" onClick={() => setShowSidebar(false)}>
@@ -159,7 +183,11 @@ export default function Chat() {
         </header>
 
         {conversationId ? (
-          <Terminal conversationId={conversationId} />
+          isMobile ? (
+            <MobileTerminal conversationId={conversationId} />
+          ) : (
+            <Terminal conversationId={conversationId} />
+          )
         ) : (
           <div className="empty-state">
             <h2>欢迎使用 Cloud Code</h2>
@@ -324,10 +352,11 @@ export default function Chat() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
+          justify-content: flex-start;
           height: 100%;
           color: #8e8ea0;
           text-align: center;
+          padding-top: 20vh;
         }
 
         .empty-state h2 {
@@ -346,10 +375,12 @@ export default function Chat() {
             box-shadow: 2px 0 8px rgba(0,0,0,0.1);
             padding-top: env(safe-area-inset-top);
             padding-bottom: env(safe-area-inset-bottom);
+            z-index: 100;
           }
 
           .sidebar.open {
             left: 0;
+            z-index: 200;
           }
 
           .sidebar-overlay:not(:has(+ .sidebar.open)) {
@@ -358,6 +389,7 @@ export default function Chat() {
 
           .sidebar-overlay {
             display: block;
+            z-index: 150;
           }
 
           .close-sidebar {

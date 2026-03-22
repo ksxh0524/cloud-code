@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal'
+import CustomSelect from './CustomSelect'
 
 interface CliType {
   type: 'claude' | 'opencode'
@@ -147,7 +148,6 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
         </div>
       ) : (
         <>
-          {/* CLI 类型选择 */}
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#2e2e2e' }}>
               选择 CLI 工具
@@ -157,29 +157,32 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
                 const status = cliStatus[cli.type]
                 const isSelected = selectedCliType === cli.type
                 const isInstalled = status?.installed
+                const isChecking = checkingCli || !status
                 
                 return (
                   <div
                     key={cli.type}
                     onClick={() => isInstalled && setSelectedCliType(cli.type)}
+                    className="cli-option-card"
                     style={{
                       padding: '12px',
-                      border: `2px solid ${isSelected ? '#3b82f6' : isInstalled ? '#e5e5e5' : '#fee2e2'}`,
+                      border: `2px solid ${isSelected ? '#3b82f6' : isChecking ? '#e5e5e5' : isInstalled ? '#e5e5e5' : '#fee2e2'}`,
                       borderRadius: '8px',
                       cursor: isInstalled ? 'pointer' : 'not-allowed',
                       background: isSelected ? '#eff6ff' : isInstalled ? '#fff' : '#fef2f2',
                       opacity: isInstalled ? 1 : 0.6,
-                      transition: 'all 0.2s'
+                      transition: 'all 0.2s',
+                      overflow: 'hidden'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 600, color: isSelected ? '#2563eb' : '#2e2e2e' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', flexWrap: 'wrap', gap: '4px' }}>
+                      <span className="cli-option-name" style={{ fontWeight: 600, color: isSelected ? '#2563eb' : '#2e2e2e', fontSize: '15px' }}>
                         {cli.name}
                       </span>
-                      {checkingCli ? (
+                      {isChecking ? (
                         <span style={{ fontSize: '12px', color: '#8e8ea0' }}>检查中...</span>
                       ) : isInstalled ? (
-                        <span style={{ fontSize: '12px', color: '#10a37f', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '12px', color: '#10a37f', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
                           <span>✓</span>
                           <span>{status?.version?.split('\n')[0] || '已安装'}</span>
                         </span>
@@ -190,11 +193,11 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#8e8ea0' }}>
+                    <p className="cli-option-desc" style={{ fontSize: '13px', color: '#8e8ea0', margin: 0, lineHeight: '1.4' }}>
                       {cli.description}
-                    </div>
-                    {!isInstalled && !checkingCli && (
-                      <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '4px' }}>
+                    </p>
+                    {!isInstalled && !isChecking && (
+                      <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '4px', lineHeight: '1.3' }}>
                         提示: {cli.type === 'claude' ? '运行 npm install -g @anthropic-ai/claude-code 安装' : '运行 npm install -g opencode 安装'}
                       </div>
                     )}
@@ -204,81 +207,55 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
             </div>
           </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#2e2e2e' }}>
-              工作目录
-            </label>
-            <select
-              value={selectedDir}
-              onChange={(e) => handleDirChange(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #e5e5e5',
-                borderRadius: '8px',
-                fontSize: '14px',
-                outline: 'none',
-                background: '#fff',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">请选择工作目录</option>
-              {workDirs.map((dir) => (
-                <option key={dir.path} value={dir.path}>
-                  {dir.name} {dir.isConfig ? '(默认)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          <CustomSelect
+            label="工作目录"
+            value={selectedDir}
+            onChange={handleDirChange}
+            options={[
+              { value: '', label: '请选择工作目录' },
+              ...workDirs.map((dir) => ({
+                value: dir.path,
+                label: `${dir.name} ${dir.isConfig ? '(默认)' : ''}`
+              }))
+            ]}
+          />
 
           {subDirs.length > 0 && (
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#2e2e2e' }}>
-                子目录（可选）
-              </label>
-              <select
-                value={selectedSubDir}
-                onChange={(e) => setSelectedSubDir(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #e5e5e5',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  outline: 'none',
-                  background: '#fff',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="">使用根目录</option>
-                {subDirs.map((subDir) => (
-                  <option key={subDir} value={subDir}>
-                    {subDir}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <CustomSelect
+              label="子目录（可选）"
+              value={selectedSubDir}
+              onChange={setSelectedSubDir}
+              options={[
+                { value: '', label: '使用根目录' },
+                ...subDirs.map((subDir) => ({
+                  value: subDir,
+                  label: subDir
+                }))
+              ]}
+            />
           )}
 
           {selectedDir && (
-            <div style={{ marginBottom: '16px', padding: '10px 12px', background: '#f7f7f8', borderRadius: '8px', fontSize: '13px', color: '#8e8ea0' }}>
-              将使用: <span style={{ color: '#2e2e2e', fontWeight: 500 }}>{getFinalPath()}</span>
-              <br />
-              CLI: <span style={{ color: '#2e2e2e', fontWeight: 500 }}>{cliTypes.find(c => c.type === selectedCliType)?.name || selectedCliType}</span>
+            <div style={{ marginBottom: '16px', padding: '10px 12px', background: '#f7f7f8', borderRadius: '8px', fontSize: '13px', color: '#8e8ea0', wordBreak: 'break-all' }}>
+              <div>将使用: <span style={{ color: '#2e2e2e', fontWeight: 500 }}>{getFinalPath()}</span></div>
+              <div style={{ marginTop: '4px' }}>CLI: <span style={{ color: '#2e2e2e', fontWeight: 500 }}>{cliTypes.find(c => c.type === selectedCliType)?.name || selectedCliType}</span></div>
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             <button
               onClick={onClose}
               style={{
-                padding: '10px 20px',
+                padding: '12px 20px',
                 background: '#f7f7f8',
                 border: '1px solid #e5e5e5',
                 borderRadius: '8px',
                 cursor: 'pointer',
-                fontSize: '14px',
-                color: '#2e2e2e'
+                fontSize: '15px',
+                color: '#2e2e2e',
+                minHeight: '44px',
+                flex: '1',
+                minWidth: '100px'
               }}
             >
               取消
@@ -287,18 +264,37 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
               onClick={handleConfirm}
               disabled={!canConfirm}
               style={{
-                padding: '10px 20px',
+                padding: '12px 20px',
                 background: canConfirm ? '#2e2e2e' : '#e5e5e5',
                 color: canConfirm ? '#fff' : '#8e8ea0',
                 border: 'none',
                 borderRadius: '8px',
                 cursor: canConfirm ? 'pointer' : 'not-allowed',
-                fontSize: '14px'
+                fontSize: '15px',
+                minHeight: '44px',
+                flex: '1',
+                minWidth: '100px'
               }}
             >
               创建
             </button>
           </div>
+          
+          <style>{`
+            @media (max-width: 480px) {
+              .cli-option-card {
+                padding: 10px !important;
+              }
+              
+              .cli-option-card .cli-option-name {
+                font-size: 14px !important;
+              }
+              
+              .cli-option-card .cli-option-desc {
+                font-size: 11px !important;
+              }
+            }
+          `}</style>
         </>
       )}
     </Modal>

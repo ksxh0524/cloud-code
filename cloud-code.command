@@ -2,13 +2,11 @@
 
 # Cloud Code 管理脚本
 # 双击运行或在终端执行: ./cloud-code.command
-# 支持切换 Node.js/Python 后端
 
 PROJECT_DIR="/Users/liuyang/codes/cloud-code"
 BACKEND_PORT=18765
 FRONTEND_PORT=18766
 LOG_DIR="$PROJECT_DIR/logs"
-BACKEND_TYPE="${BACKEND_TYPE:-python}"  # python 或 node
 
 # 颜色定义
 GREEN='\033[0;32m'
@@ -35,8 +33,8 @@ get_pid() {
     lsof -Pi :$1 -sTCP:LISTEN -t 2>/dev/null
 }
 
-# 启动 Python 后端
-start_python_backend() {
+# 启动后端
+start_backend() {
     echo -e "${BLUE}启动 Python 后端服务...${NC}"
     cd "$PROJECT_DIR/backend_py"
     
@@ -66,30 +64,11 @@ start_python_backend() {
     cd "$PROJECT_DIR"
 }
 
-# 启动 Node.js 后端 (备用)
-start_node_backend() {
-    echo -e "${BLUE}启动 Node.js 后端服务...${NC}"
-    cd "$PROJECT_DIR/backend"
-    
-    # 检查依赖
-    if [ ! -d "node_modules" ]; then
-        echo -e "${YELLOW}安装 Node.js 依赖...${NC}"
-        pnpm install
-    fi
-    
-    nohup pnpm run dev > "$LOG_DIR/backend.log" 2>&1 &
-    BACKEND_PID=$!
-    echo $BACKEND_PID > "$LOG_DIR/backend.pid"
-    cd "$PROJECT_DIR"
-}
-
 # 启动服务
 start_services() {
     echo -e "${CYAN}========================================${NC}"
     echo -e "${CYAN}${BOLD}     Cloud Code 启动中...${NC}"
     echo -e "${CYAN}========================================${NC}"
-    echo ""
-    echo -e "${BOLD}后端类型: ${YELLOW}$BACKEND_TYPE${NC}"
     echo ""
 
     # 检查是否已在运行
@@ -114,11 +93,7 @@ start_services() {
     fi
 
     # 启动后端
-    if [ "$BACKEND_TYPE" = "python" ]; then
-        start_python_backend
-    else
-        start_node_backend
-    fi
+    start_backend
 
     # 等待后端启动
     for i in {1..15}; do
@@ -235,7 +210,7 @@ show_status() {
     # 检查后端
     if is_running $BACKEND_PORT; then
         local pid=$(get_pid $BACKEND_PORT)
-        echo -e "后端服务: ${GREEN}● 运行中${NC} (PID: $pid, 端口: $BACKEND_PORT, 类型: $BACKEND_TYPE)"
+        echo -e "后端服务: ${GREEN}● 运行中${NC} (PID: $pid, 端口: $BACKEND_PORT)"
         backend_running=1
     else
         echo -e "后端服务: ${RED}○ 未运行${NC} (端口: $BACKEND_PORT)"
@@ -298,7 +273,7 @@ show_menu() {
 
     # 显示当前状态
     if is_running $BACKEND_PORT && is_running $FRONTEND_PORT; then
-        echo -e "  当前状态: ${GREEN}${BOLD}● 运行中${NC} (后端: $BACKEND_TYPE)"
+        echo -e "  当前状态: ${GREEN}${BOLD}● 运行中${NC}"
     else
         echo -e "  当前状态: ${RED}${BOLD}○ 未运行${NC}"
     fi
@@ -311,23 +286,9 @@ show_menu() {
     echo -e "  ${YELLOW}3${NC} - 重启服务"
     echo -e "  ${CYAN}4${NC} - 查看状态"
     echo -e "  ${BLUE}5${NC} - 查看日志"
-    echo -e "  ${MAGENTA}6${NC} - 切换后端 (当前: $BACKEND_TYPE)"
     echo -e "  ${NC}0${NC} - 退出"
     echo ""
-    echo -ne "${BOLD}请输入选项 [0-6]: ${NC}"
-}
-
-# 切换后端类型
-switch_backend() {
-    if [ "$BACKEND_TYPE" = "python" ]; then
-        BACKEND_TYPE="node"
-    else
-        BACKEND_TYPE="python"
-    fi
-    echo -e "${GREEN}已切换到 $BACKEND_TYPE 后端${NC}"
-    echo ""
-    echo -e "${YELLOW}注意: 需要重启服务才能生效${NC}"
-    sleep 2
+    echo -ne "${BOLD}请输入选项 [0-5]: ${NC}"
 }
 
 # 查看日志
@@ -380,34 +341,14 @@ main() {
             status|info)
                 show_status
                 ;;
-            python)
-                BACKEND_TYPE="python"
-                shift
-                if [ "$1" = "start" ]; then
-                    start_services
-                else
-                    show_status
-                fi
-                ;;
-            node)
-                BACKEND_TYPE="node"
-                shift
-                if [ "$1" = "start" ]; then
-                    start_services
-                else
-                    show_status
-                fi
-                ;;
             *)
-                echo "用法: $0 {start|stop|restart|status|python|node}"
+                echo "用法: $0 {start|stop|restart|status}"
                 echo ""
                 echo "命令:"
                 echo "  start   - 启动服务"
                 echo "  stop    - 停止服务"
                 echo "  restart - 重启服务"
                 echo "  status  - 查看状态"
-                echo "  python  - 使用 Python 后端"
-                echo "  node    - 使用 Node.js 后端"
                 exit 1
                 ;;
         esac
@@ -443,9 +384,6 @@ main() {
                 ;;
             5)
                 show_logs
-                ;;
-            6)
-                switch_backend
                 ;;
             0|q|Q)
                 echo ""

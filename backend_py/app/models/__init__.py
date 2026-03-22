@@ -20,6 +20,7 @@ class Conversation(Base):
     
     # Relationship
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
+    terminal_history = relationship("TerminalHistory", back_populates="conversation", cascade="all, delete-orphan")
 
 
 class Message(Base):
@@ -38,9 +39,22 @@ class Message(Base):
     conversation = relationship("Conversation", back_populates="messages")
 
 
+class TerminalHistory(Base):
+    """Terminal output history model"""
+    __tablename__ = "terminal_history"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversationId = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    content = Column(Text, nullable=False)  # 原始终端输出（包含 ANSI 转义码）
+    createdAt = Column(String, nullable=False, default=lambda: datetime.now().isoformat())
+
+    # Relationship
+    conversation = relationship("Conversation", back_populates="terminal_history")
+
+
 class Config(Base):
     """Configuration model"""
     __tablename__ = "config"
-    
+
     key = Column(String, primary_key=True)
     value = Column(Text, nullable=False)

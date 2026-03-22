@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ToolCall as ToolCallType } from '../../../shared/types'
+import { ToolCall as ToolCallType } from '../types'
 import CodeBlock from './CodeBlock'
 
 interface ToolCallProps {

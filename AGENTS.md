@@ -3,9 +3,8 @@
 ## Project Overview
 
 Cloud Code is a web-based mobile interface for Claude Code CLI. It consists of:
-- **Backend**: Hono (Node.js) + SQLite + WebSocket server (port 18765)
+- **Backend**: Python (FastAPI) + SQLite + WebSocket server (port 18765)
 - **Frontend**: React 19 + Vite + TypeScript (port 18766)
-- **Shared**: Common TypeScript types
 
 ## Build Commands
 
@@ -13,28 +12,28 @@ Cloud Code is a web-based mobile interface for Claude Code CLI. It consists of:
 # Install dependencies
 pnpm install
 
-# Development (runs both frontend and backend)
+# Development (frontend only, backend runs separately)
 pnpm dev
 
 # Build production
 pnpm build
-
-# Start production server
-pnpm start
 ```
 
-### Workspace-specific Commands
+### Frontend Commands
 
 ```bash
-# Backend only
-pnpm --filter backend dev      # Development with hot reload (tsx watch)
-pnpm --filter backend build    # Compile TypeScript
-pnpm --filter backend start    # Run compiled code
-
 # Frontend only
 pnpm --filter frontend dev     # Vite dev server
 pnpm --filter frontend build   # Production build
 pnpm --filter frontend preview # Preview production build
+```
+
+### Backend Commands
+
+```bash
+cd backend_py
+source venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 18765 --reload
 ```
 
 ## Test Commands
@@ -69,12 +68,6 @@ npx playwright test --debug
 
 ### TypeScript Configuration
 
-**Backend** (`backend/tsconfig.json`):
-- Target: ES2022
-- Module: ES2022 with bundler resolution
-- Strict mode: OFF (`strict: false`, `noImplicitAny: false`)
-- Output: `dist/` directory
-
 **Frontend** (`frontend/tsconfig.json`):
 - Target: ES2020
 - Strict mode: ON (`strict: true`)
@@ -82,14 +75,6 @@ npx playwright test --debug
 - JSX: `react-jsx`
 
 ### Import Conventions
-
-**Backend** (ES modules with .js extensions):
-```typescript
-import { Hono } from 'hono'
-import { serve } from '@hono/node-server'
-import webRoutes from './routes/web.js'  // Note: .js extension required
-import type { Conversation } from '../../../shared/types.js'
-```
 
 **Frontend** (standard ES modules):
 ```typescript
@@ -117,17 +102,6 @@ import '@xterm/xterm/css/xterm.css'
 ### Error Handling
 
 ```typescript
-// Backend: Log and return JSON error
-app.get('/api/data', async (c) => {
-  try {
-    const data = await fetchData()
-    return c.json({ data })
-  } catch (err) {
-    console.error('Failed to fetch:', err)
-    return c.json({ error: err.message }, 500)
-  }
-})
-
 // Frontend: Try-catch with user feedback
 try {
   const result = await api.call()
@@ -145,27 +119,33 @@ try {
 - Callbacks wrapped in `useCallback` when needed
 - Refs for DOM elements and external libraries
 
-### Database Models
+### Types
 
-Located in `backend/src/models/`:
-- Use SQLite via `sql.js`
-- Export CRUD functions (e.g., `createConversation`, `getConversation`)
-- Initialize in `backend/src/db/index.ts`
-
-### WebSocket Events
-
-Shared types in `shared/types.ts`:
+Located in `frontend/src/types.ts`:
 ```typescript
-export type WSEvent =
-  | { type: 'message'; conversationId: string; data: Message }
-  | { type: 'tool'; conversationId: string; data: ToolCall }
-  | { type: 'status'; conversationId: string; data: { status: string } }
+export interface Conversation {
+  id: string
+  name: string
+  workDir: string
+  cliType: CliType
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Message {
+  id: string
+  conversationId: string
+  role: 'user' | 'assistant'
+  content: string
+  toolCalls?: ToolCall[]
+  status: 'pending' | 'streaming' | 'completed' | 'error'
+  createdAt: string
+}
 ```
 
 ## Architecture Notes
 
 - Monorepo with pnpm workspaces (`pnpm-workspace.yaml`)
-- Shared types referenced relatively from backend
 - Frontend proxies API calls to backend via Vite config
 - WebSocket for real-time terminal communication
 - CLI service spawns processes via Python PTY wrapper
@@ -174,7 +154,7 @@ export type WSEvent =
 ## Important Paths
 
 - Frontend entry: `frontend/src/main.tsx`
-- Backend entry: `backend/src/index.ts`
-- Shared types: `shared/types.ts`
-- Database: `backend/data.db` (SQLite, auto-created)
+- Backend entry: `backend_py/app/main.py`
+- Shared types: `frontend/src/types.ts`
+- Database: `backend_py/data.db` (SQLite, auto-created)
 - Test directory: `test/`

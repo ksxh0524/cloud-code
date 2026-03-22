@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Conversation, Message } from '../../../shared/types'
+import { Conversation, Message } from '../types'
 import { conversationApi, messageApi } from '../lib/api'
 
 export function useConversation(currentId: string | null) {

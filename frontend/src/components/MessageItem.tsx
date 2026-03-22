@@ -1,4 +1,4 @@
-import { Message } from '../../../shared/types'
+import { Message } from '../types'
 import ToolCall from './ToolCall'
 
 interface MessageItemProps {

@@ -38,18 +38,24 @@ class WebSocketManager:
         """Get number of clients for a conversation"""
         return len(self._clients.get(conversation_id, set()))
     
-    async def broadcast(self, conversation_id: str, data: Any):
-        """Broadcast message to all clients of a conversation"""
+    async def broadcast(self, conversation_id: str, data: Any) -> bool:
+        """Broadcast message to all clients of a conversation
+        
+        Returns:
+            bool: True if message was sent to at least one client, False otherwise
+        """
         clients = self._clients.get(conversation_id)
         if not clients:
-            return
+            return False
         
         message = json.dumps(data)
         disconnected = []
+        sent_count = 0
         
         for ws in clients:
             try:
                 await ws.send_text(message)
+                sent_count += 1
             except Exception as e:
                 logger.warning(f"Failed to send message: {e}")
                 disconnected.append(ws)
@@ -57,10 +63,13 @@ class WebSocketManager:
         # Remove disconnected clients
         for ws in disconnected:
             self._clients[conversation_id].discard(ws)
+        
+        return sent_count > 0
     
     async def send_output(self, conversation_id: str, output: str):
         """Send CLI output to clients"""
-        await self.broadcast(conversation_id, {
+        logger.debug(f"Sending output to {conversation_id}: {output[:50]}...")
+        return await self.broadcast(conversation_id, {
             "type": "output",
             "conversationId": conversation_id,
             "data": {"output": output}

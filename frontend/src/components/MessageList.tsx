@@ -1,4 +1,4 @@
-import { Message } from '../../../shared/types'
+import { Message } from '../types'
 import MessageItem from './MessageItem'
 
 interface MessageListProps {

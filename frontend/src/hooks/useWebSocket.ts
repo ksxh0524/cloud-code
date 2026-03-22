@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { WSEvent, Message, ToolCall } from '../../../shared/types'
+import { WSEvent, Message } from '../types'
 
 export function useWebSocket(conversationId: string | undefined) {
   const [connected, setConnected] = useState(false)

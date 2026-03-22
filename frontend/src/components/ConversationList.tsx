@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Conversation } from '../../../shared/types'
+import { Conversation } from '../types'
 
 interface ConversationListProps {
   conversations: Conversation[]
@@ -10,7 +10,7 @@ interface ConversationListProps {
   onRename: (id: string, newName: string) => void
 }
 
-export default function ConversationList({ conversations, currentId, onSelect, onCreate, onDelete, onRename }: ConversationListProps) {
+export default function ConversationList({ conversations, currentId, onSelect, onCreate: _onCreate, onDelete, onRename }: ConversationListProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [showMenu, setShowMenu] = useState<string | null>(null)
@@ -83,39 +83,42 @@ export default function ConversationList({ conversations, currentId, onSelect, o
               align-items: center;
               justify-content: center;
               z-index: 1000;
+              padding: 16px;
             }
 
             .modal-content {
               background: #ffffff;
               border-radius: 12px;
               padding: 24px;
-              min-width: 320px;
+              min-width: 280px;
+              max-width: 90vw;
             }
 
             .modal-header {
-              font-size: 16px;
+              font-size: 17px;
               font-weight: 600;
               color: #2e2e2e;
               margin-bottom: 16px;
             }
 
             .modal-body p {
-              font-size: 14px;
+              font-size: 15px;
               color: #8e8ea0;
             }
 
             .modal-actions {
               display: flex;
-              gap: 8px;
+              gap: 12px;
               justify-content: flex-end;
-              margin-top: 16px;
+              margin-top: 20px;
             }
 
             .modal-btn {
-              padding: 8px 16px;
-              border-radius: 6px;
-              font-size: 14px;
+              padding: 12px 20px;
+              border-radius: 8px;
+              font-size: 16px;
               cursor: pointer;
+              min-height: 48px;
             }
 
             .modal-btn-cancel {
@@ -124,10 +127,18 @@ export default function ConversationList({ conversations, currentId, onSelect, o
               color: #2e2e2e;
             }
 
+            .modal-btn-cancel:active {
+              background: #e8e8ea;
+            }
+
             .modal-btn-confirm {
               background: #ef4444;
               border: none;
               color: #ffffff;
+            }
+
+            .modal-btn-confirm:active {
+              background: #dc2626;
             }
           `}</style>
         </div>
@@ -303,19 +314,30 @@ export default function ConversationList({ conversations, currentId, onSelect, o
           white-space: nowrap;
         }
 
-        .conversation-menu {
+.conversation-menu {
           background: none;
           border: none;
           font-size: 16px;
           color: #8e8ea0;
           cursor: pointer;
-          padding: 4px 8px;
+          padding: 8px;
+          min-width: 44px;
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           opacity: 0;
           transition: opacity 0.2s;
         }
 
         .conversation-item:hover .conversation-menu {
           opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+          .conversation-menu {
+            opacity: 1;
+          }
         }
 
         .conversation-actions {
@@ -327,19 +349,26 @@ export default function ConversationList({ conversations, currentId, onSelect, o
           border-radius: 6px;
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
           z-index: 10;
-          min-width: 100px;
+          min-width: 120px;
         }
 
         .action-item {
-          padding: 10px 16px;
+          padding: 12px 16px;
           font-size: 14px;
           color: #2e2e2e;
           cursor: pointer;
           transition: background 0.2s;
+          min-height: 44px;
+          display: flex;
+          align-items: center;
         }
 
         .action-item:hover {
           background: #f7f7f8;
+        }
+
+        .action-item:active {
+          background: #e8e8ea;
         }
 
         .action-item:first-child {
@@ -363,11 +392,12 @@ export default function ConversationList({ conversations, currentId, onSelect, o
 
         .edit-form input {
           flex: 1;
-          padding: 6px 8px;
+          padding: 10px 12px;
           border: 1px solid #e5e5e5;
           border-radius: 4px;
-          font-size: 14px;
+          font-size: 16px;
           outline: none;
+          min-height: 44px;
         }
 
         .edit-form input:focus {
@@ -379,10 +409,17 @@ export default function ConversationList({ conversations, currentId, onSelect, o
           color: #ffffff;
           border: none;
           border-radius: 4px;
-          width: 24px;
-          height: 24px;
+          min-width: 44px;
+          min-height: 44px;
           cursor: pointer;
-          font-size: 12px;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .edit-save:active {
+          opacity: 0.8;
         }
 
         @media (max-width: 768px) {

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.database import get_db
-from app.models import Conversation
+from app.models import Conversation, TerminalHistory
 from app.services.conversation_service import (
     create_conversation, get_conversation,
     list_conversations, update_conversation, delete_conversation
@@ -281,3 +281,50 @@ async def update_app_config(
             raise HTTPException(status_code=400, detail=str(e.detail))
 
     return get_config(db)
+
+
+@router.get("/conversations/{conversation_id}/history")
+async def get_terminal_history(
+    conversation_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get terminal history for a conversation"""
+    # Check conversation exists
+    conversation = get_conversation(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Get all history entries
+    history = db.query(TerminalHistory).filter(
+        TerminalHistory.conversationId == conversation_id
+    ).order_by(TerminalHistory.createdAt.asc()).all()
+
+    # Combine all content into one string
+    combined_content = "".join([h.content for h in history])
+
+    return {
+        "conversationId": conversation_id,
+        "content": combined_content,
+        "entries": len(history)
+    }
+
+
+@router.delete("/conversations/{conversation_id}/history")
+async def clear_terminal_history(
+    conversation_id: str,
+    db: Session = Depends(get_db)
+):
+    """Clear terminal history for a conversation"""
+    # Check conversation exists
+    conversation = get_conversation(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Delete all history entries
+    deleted = db.query(TerminalHistory).filter(
+        TerminalHistory.conversationId == conversation_id
+    ).delete()
+    db.commit()
+
+    logger.info(f"Cleared {deleted} history entries for conversation: {conversation_id}")
+    return {"success": True, "deleted": deleted}

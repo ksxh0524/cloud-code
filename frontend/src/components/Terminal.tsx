@@ -19,9 +19,11 @@ export default function Terminal({ conversationId }: TerminalProps) {
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const isManualCloseRef = useRef(false)
+  const isConnectingRef = useRef(false)
+  const conversationIdRef = useRef(conversationId)
 
   const [state, setState] = useState<TerminalState>({
     connected: false,
@@ -30,23 +32,22 @@ export default function Terminal({ conversationId }: TerminalProps) {
     error: null
   })
 
-  // 初始化终端
-  const initTerminal = useCallback(() => {
+  // Initialize terminal - only once
+  const initTerminal = useCallback(async () => {
     if (!terminalRef.current || xtermRef.current) return
-
-    // 创建终端实例 - 修复字符间距问题
+    
     const terminal = new XTerm({
       cursorBlink: true,
-      cursorStyle: 'underline',  // 使用下划线光标避免显示为问号
-      fontSize: 13,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      cursorStyle: 'underline',
+      fontSize: 14,
+      fontFamily: '"SF Mono", "Apple Braille", "Menlo", "Monaco", "Courier New", "Segoe UI Symbol", "Noto Sans Symbols", monospace',
       fontWeight: 400,
       letterSpacing: 0,
       lineHeight: 1.2,
       theme: {
-        background: '#1a1a1a',  // 深色背景更适合 TUI
+        background: '#1a1a1a',
         foreground: '#e5e5e5',
-        cursor: '#10a37f',  // 绿色光标更醒目
+        cursor: '#10a37f',
         cursorAccent: '#1a1a1a',
         selectionBackground: '#3b82f640',
         black: '#1a1a1a',
@@ -67,63 +68,68 @@ export default function Terminal({ conversationId }: TerminalProps) {
         brightWhite: '#ffffff'
       },
       scrollback: 10000,
-      // 关键修复：禁用 convertEol 避免字符间距问题
-      convertEol: false,
+      convertEol: true,
       screenReaderMode: false,
-      // 禁用 bell
-      bellStyle: 'none',
-      // 禁用右键菜单
       rightClickSelectsWord: false,
+      allowProposedApi: true,
+      allowTransparency: false,
     })
 
-    // 创建并加载 FitAddon
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
     fitAddonRef.current = fitAddon
 
-    // 挂载到 DOM
     terminal.open(terminalRef.current)
     xtermRef.current = terminal
 
-    // 显示加载提示
     terminal.write('\x1b[33m⏳ 正在启动 CLI...\x1b[0m\r\n')
 
-    // 延迟适配以确保正确尺寸
     setTimeout(() => {
       fitAddon.fit()
     }, 100)
 
-    // 处理用户输入
     terminal.onData((data: string) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
           type: 'input',
-          conversationId,
+          conversationId: conversationIdRef.current,
           data: { input: data }
         }))
       }
     })
 
     return terminal
-  }, [conversationId])
+  }, [])
 
-  // 连接 WebSocket
+  // Connect WebSocket - stable reference
   const connectWebSocket = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('WebSocket already connected, skipping')
+      return
+    }
+    
+    if (isConnectingRef.current) {
+      console.log('WebSocket connection in progress, skipping')
+      return
+    }
+    
+    isConnectingRef.current = true
 
+    console.log('Connecting WebSocket for conversation:', conversationIdRef.current)
     setState(prev => ({ ...prev, connecting: true, error: null }))
     isManualCloseRef.current = false
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws?conversationId=${conversationId}`
+    const wsUrl = `${protocol}//${window.location.host}/ws?conversationId=${conversationIdRef.current}`
     
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onopen = () => {
+      console.log('WebSocket connected')
+      isConnectingRef.current = false
       setState(prev => ({ ...prev, connected: true, connecting: false, error: null }))
 
-      // 连接后调整大小
       if (fitAddonRef.current) {
         setTimeout(() => fitAddonRef.current?.fit(), 100)
       }
@@ -133,21 +139,24 @@ export default function Terminal({ conversationId }: TerminalProps) {
       try {
         const data = JSON.parse(event.data)
         if (data.type === 'output' && xtermRef.current) {
-          // 收到第一条输出时标记 CLI 已就绪
-          if (!state.cliReady) {
+          setState(prev => {
+            if (!prev.cliReady) {
+              return { ...prev, cliReady: true }
+            }
+            return prev
+          })
+          xtermRef.current.write(data.data.output)
+        } else if (data.type === 'history' && xtermRef.current) {
+          // Handle history message for reused sessions
+          console.log('Received history, writing to terminal')
+          if (data.data?.content) {
+            xtermRef.current.clear()
+            xtermRef.current.write(data.data.content)
             setState(prev => ({ ...prev, cliReady: true }))
           }
-          xtermRef.current.write(data.data.output)
         } else if (data.type === 'status') {
-          // 处理状态消息
           if (data.data?.status === 'started') {
             setState(prev => ({ ...prev, cliReady: true }))
-            // 显示提示信息
-            if (xtermRef.current && !data.data.reused) {
-              xtermRef.current.write('\x1b[32m✓ CLI 已就绪\x1b[0m\r\n')
-            } else if (xtermRef.current && data.data.reused) {
-              xtermRef.current.write('\x1b[36m✓ 复用已有会话\x1b[0m\r\n')
-            }
           }
         }
       } catch (e) {
@@ -156,22 +165,28 @@ export default function Terminal({ conversationId }: TerminalProps) {
     }
 
     ws.onclose = (event) => {
+      console.log('WebSocket closed:', event.code)
+      isConnectingRef.current = false
       setState(prev => ({ ...prev, connected: false, connecting: false }))
       if (!isManualCloseRef.current && event.code !== 1000) {
         reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000)
       }
     }
 
-    ws.onerror = () => {
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+      isConnectingRef.current = false
       setState(prev => ({ ...prev, connecting: false, error: '连接失败' }))
     }
-  }, [conversationId])
+  }, [])
 
-  // 断开连接
+  // Disconnect
   const disconnect = useCallback(() => {
+    console.log('Manually disconnecting')
     isManualCloseRef.current = true
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
     }
     if (wsRef.current) {
       wsRef.current.close(1000)
@@ -180,12 +195,14 @@ export default function Terminal({ conversationId }: TerminalProps) {
     setState(prev => ({ ...prev, connected: false, error: null }))
   }, [])
 
-  // 组件挂载时初始化
+  // Initialize on mount
   useEffect(() => {
-    const terminal = initTerminal()
-    connectWebSocket()
+    const init = async () => {
+      await initTerminal()
+      connectWebSocket()
+    }
+    init()
 
-    // ResizeObserver
     if ('ResizeObserver' in window && terminalRef.current) {
       resizeObserverRef.current = new ResizeObserver(() => {
         if (fitAddonRef.current) {
@@ -201,10 +218,23 @@ export default function Terminal({ conversationId }: TerminalProps) {
       }
     }
     window.addEventListener('resize', handleResize)
+    
+    /* Via browser fix: refit on visibility change */
+    const handleVisibilityChange = () => {
+      if (!document.hidden && fitAddonRef.current) {
+        setTimeout(() => fitAddonRef.current?.fit(), 100)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
+      console.log('Terminal component unmounting, cleaning up...')
       window.removeEventListener('resize', handleResize)
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
       if (resizeObserverRef.current && terminalRef.current) {
         resizeObserverRef.current.unobserve(terminalRef.current)
         resizeObserverRef.current.disconnect()
@@ -212,13 +242,47 @@ export default function Terminal({ conversationId }: TerminalProps) {
       if (wsRef.current) {
         isManualCloseRef.current = true
         wsRef.current.close()
+        wsRef.current = null
       }
       if (xtermRef.current) {
         xtermRef.current.dispose()
         xtermRef.current = null
       }
     }
-  }, [initTerminal, connectWebSocket])
+  }, [])
+
+  // Handle conversationId change
+  useEffect(() => {
+    if (conversationIdRef.current !== conversationId) {
+      console.log('Conversation ID changed from', conversationIdRef.current, 'to', conversationId)
+      conversationIdRef.current = conversationId
+      
+      // Disconnect old
+      if (wsRef.current) {
+        isManualCloseRef.current = true
+        wsRef.current.close()
+        wsRef.current = null
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+      
+      // Clear terminal
+      if (xtermRef.current) {
+        xtermRef.current.clear()
+        xtermRef.current.write('\x1b[33m⏳ 正在启动 CLI...\x1b[0m\r\n')
+      }
+      
+      // Reset state
+      setState({ connected: false, connecting: false, cliReady: false, error: null })
+      
+      // Connect new
+      setTimeout(() => {
+        connectWebSocket()
+      }, 100)
+    }
+  }, [conversationId, connectWebSocket])
 
   const statusInfo = state.connected
     ? state.cliReady
@@ -231,9 +295,13 @@ export default function Terminal({ conversationId }: TerminalProps) {
   return (
     <div className="terminal-wrapper">
       <div className="terminal-header">
-        <div className="terminal-status" style={{ color: statusInfo.color }}>
-          <span className="status-dot">{statusInfo.dot}</span>
-          <span className="status-text">{statusInfo.text}</span>
+        <div className="terminal-title-row">
+          <span className="terminal-title">Cloud Code Terminal</span>
+          <span className="terminal-divider">|</span>
+          <span className="terminal-status" style={{ color: statusInfo.color }}>
+            <span className="status-dot">{statusInfo.dot}</span>
+            <span className="status-text">{statusInfo.text}</span>
+          </span>
         </div>
         
         <div className="terminal-actions">
@@ -245,34 +313,46 @@ export default function Terminal({ conversationId }: TerminalProps) {
         </div>
       </div>
 
-      <div ref={terminalRef} className="terminal-container" />
+      <div 
+        ref={terminalRef} 
+        className="terminal-container"
+        onClick={() => {
+          if (xtermRef.current) {
+            xtermRef.current.focus()
+          }
+        }}
+        style={{ cursor: 'text' }}
+      />
 
       <style>{`
         .terminal-wrapper {
           flex: 1;
           display: flex;
           flex-direction: column;
-          padding: 12px;
-          background: #fafafa;
-          overflow: hidden;
           height: 100%;
+          overflow: hidden;
+          background: #f9f9f9;
         }
 
         .terminal-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-bottom: 8px;
-          padding: 0 4px;
-          flex-shrink: 0;
+          padding: 12px 16px;
+          background: #ffffff;
+          border-bottom: 1px solid #e5e5e5;
         }
 
         .terminal-status {
           display: flex;
           align-items: center;
-          gap: 6px;
-          font-size: 13px;
+          gap: 8px;
+          font-size: 14px;
           font-weight: 500;
+        }
+
+        .status-dot {
+          font-size: 12px;
         }
 
         .terminal-actions {
@@ -281,63 +361,142 @@ export default function Terminal({ conversationId }: TerminalProps) {
         }
 
         .terminal-btn {
-          padding: 4px 12px;
-          font-size: 12px;
+          padding: 8px 16px;
           background: #ffffff;
           border: 1px solid #e5e5e5;
-          border-radius: 4px;
+          border-radius: 6px;
+          font-size: 14px;
           cursor: pointer;
-          color: #1a1a1a;
+          color: #2e2e2e;
+          min-height: 36px;
           transition: all 0.2s;
         }
 
         .terminal-btn:hover {
-          background: #f5f5f5;
+          background: #f7f7f8;
         }
 
         .terminal-btn.primary {
-          background: #2563eb;
-          color: white;
-          border-color: #2563eb;
+          background: #2e2e2e;
+          color: #ffffff;
+          border-color: #2e2e2e;
         }
 
-        /* 关键修复：终端容器样式 */
+        .terminal-btn.primary:hover {
+          background: #1a1a1a;
+        }
+
+        .terminal-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
         .terminal-container {
           flex: 1;
           min-height: 0;
           overflow: hidden;
           border: 1px solid #e5e5e5;
           border-radius: 8px;
-          background: #1a1a1a; /* 深色背景 */
+          background: #1a1a1a;
+          margin: 16px;
+          position: relative;
         }
 
-        /* xterm 样式覆盖 */
         .terminal-container .xterm {
           padding: 8px;
           height: 100%;
+          width: 100%;
         }
 
         .terminal-container .xterm-viewport {
           background-color: #1a1a1a !important;
+          width: 100% !important;
         }
 
         .terminal-container .xterm-screen {
           background-color: #1a1a1a !important;
-      }
-
-        /* 修复黑色边框问题 */
-        .terminal-container .xterm-rows {
-          background-color: transparent !important;
+          width: 100% !important;
         }
 
-        /* 移动端适配 */
+        .terminal-container .xterm-rows {
+          background-color: transparent !important;
+          width: 100% !important;
+        }
+
+        /* Hide empty rows that show as lines */
+        .terminal-container .xterm-rows .xterm-row:empty {
+          display: none;
+        }
+
         @media (max-width: 768px) {
           .terminal-wrapper {
-            padding: 8px;
+            padding: 0;
+          }
+
+          .terminal-header {
+            padding: 8px 12px;
+            min-height: 44px;
+          }
+
+          .terminal-container {
+            margin: 8px;
+            border-radius: 8px;
+            flex: 1;
           }
 
           .terminal-container .xterm {
-            font-size: 11px !important;
+            font-size: 12px !important;
+            font-family: 'SF Mono', 'Apple Braille', 'Menlo', 'Monaco', 'Courier New', 'Segoe UI Symbol', 'Noto Sans Symbols', monospace !important;
+            height: 100%;
+          }
+
+          .terminal-container .xterm-rows {
+            line-height: 1.3 !important;
+          }
+
+          .terminal-btn {
+            min-height: 36px;
+            padding: 6px 12px;
+            font-size: 13px;
+          }
+          
+          .status-text {
+            font-size: 13px;
+          }
+        }
+
+        @supports (-webkit-touch-callout: none) {
+          /* iOS Safari and WebKit browsers like Via */
+          .terminal-container .xterm {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            height: 100% !important;
+            min-height: 100% !important;
+          }
+          
+          .terminal-container .xterm-viewport {
+            height: 100% !important;
+          }
+          
+          /* Remove extra lines/spaces */
+          .terminal-container .xterm-rows > div:empty,
+          .terminal-container .xterm-rows > span:empty {
+            display: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            line-height: 0 !important;
+          }
+        }
+        
+        /* Via browser specific fix */
+        @media screen and (max-width: 768px) {
+          .terminal-container * {
+            -webkit-text-size-adjust: none;
+            text-size-adjust: none;
+          }
+          
+          .terminal-container .xterm-rows {
+            contain: layout style paint;
           }
         }
       `}</style>

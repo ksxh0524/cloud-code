@@ -22,8 +22,8 @@ test.describe('Python Backend E2E Tests', () => {
     expect(response.ok()).toBeTruthy();
     const data = await response.json();
     expect(data.length).toBeGreaterThan(0);
-    expect(data.find((c: any) => c.id === 'claude')).toBeTruthy();
-    expect(data.find((c: any) => c.id === 'opencode')).toBeTruthy();
+    expect(data.find((c: any) => c.type === 'claude')).toBeTruthy();
+    expect(data.find((c: any) => c.type === 'opencode')).toBeTruthy();
   });
 
   test('Create and list conversations', async ({ request }) => {

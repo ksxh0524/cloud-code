@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { AppConfig } from '../../../shared/types'
+import { AppConfig } from '../types'
 
 export default function Settings() {
   const [config, setConfig] = useState<AppConfig | null>(null)
@@ -173,10 +173,17 @@ export default function Settings() {
           font-size: 14px;
           display: flex;
           align-items: center;
+          min-height: 44px;
+          padding: 8px;
+          margin: -8px;
         }
 
         .back-link:hover {
           color: #000;
+        }
+
+        .back-link:active {
+          opacity: 0.6;
         }
 
         .settings-header h1 {
@@ -228,14 +235,15 @@ export default function Settings() {
 
         .form-group input {
           width: 100%;
-          padding: 10px 12px;
+          padding: 12px;
           border: 1px solid #e5e5e5;
           border-radius: 8px;
-          font-size: 14px;
+          font-size: 16px;
           color: #2e2e2e;
           outline: none;
           transition: all 0.2s;
           background: #ffffff;
+          min-height: 48px;
         }
 
         .form-group input:focus {
@@ -284,19 +292,24 @@ export default function Settings() {
         }
 
         .save-button {
-          padding: 10px 20px;
+          padding: 12px 24px;
           background: #3b82f6;
           color: #ffffff;
           border: none;
           border-radius: 6px;
-          font-size: 14px;
+          font-size: 16px;
           font-weight: 500;
           cursor: pointer;
           transition: background 0.2s;
+          min-height: 48px;
         }
 
         .save-button:hover:not(:disabled) {
           background: #1a1a1a;
+        }
+
+        .save-button:active:not(:disabled) {
+          background: #333;
         }
 
         .save-button:disabled {
@@ -311,6 +324,15 @@ export default function Settings() {
         @media (max-width: 768px) {
           .settings-content {
             padding: 16px;
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
+          }
+
+          .settings-header {
+            padding-top: max(16px, env(safe-area-inset-top));
+          }
+
+          .form-group input {
+            font-size: 16px;
           }
         }
       `}</style>
