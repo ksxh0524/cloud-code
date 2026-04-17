@@ -5,6 +5,7 @@ import NewConversationModal from '../components/NewConversationModal'
 import MessageList from '../components/MessageList'
 import InputBox from '../components/InputBox'
 import { useAgentWebSocket } from '../hooks/useAgentWebSocket'
+import { authFetch } from '../lib/fetch'
 import type { Conversation, Message } from '../types'
 
 let msgCounter = 0
@@ -30,7 +31,7 @@ export default function ChatNew() {
 
   const loadConversations = async () => {
     try {
-      const res = await fetch('/api/conversations')
+      const res = await authFetch('/api/conversations')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setConversations(await res.json())
     } catch (error) {
@@ -137,7 +138,7 @@ export default function ChatNew() {
   const { sendMessage, isConnected } = useAgentWebSocket({
     workDir: currentConversation?.workDir || '',
     onMessage: handleIncomingMessage,
-    onError: () => setIsStreaming(false),
+    onError: useCallback(() => setIsStreaming(false), []),
   })
 
   const handleSendMessage = () => {
@@ -161,6 +162,7 @@ export default function ChatNew() {
       data: {
         prompt: inputValue,
         workDir: currentConversation.workDir,
+        conversationId: conversationId,
       },
     })
   }
@@ -184,7 +186,7 @@ export default function ChatNew() {
     }
 
     try {
-      const res = await fetch('/api/conversations', {
+      const res = await authFetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: conversationName, workDir, cliType }),
@@ -204,10 +206,19 @@ export default function ChatNew() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSelectConversation = (id: string) => {
+  const handleSelectConversation = async (id: string) => {
     setConversationId(id)
     setShowSidebar(false)
-    setMessages([])
+    try {
+      const res = await authFetch(`/api/conversations/${id}/messages`)
+      if (res.ok) {
+        setMessages(await res.json())
+      } else {
+        setMessages([])
+      }
+    } catch {
+      setMessages([])
+    }
   }
 
   return (
@@ -236,7 +247,7 @@ export default function ChatNew() {
           onSelect={handleSelectConversation}
           onDelete={async id => {
             try {
-              const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' })
+              const res = await authFetch(`/api/conversations/${id}`, { method: 'DELETE' })
               if (!res.ok) throw new Error(`HTTP ${res.status}`)
               if (id === conversationId) {
                 setConversationId(null)
@@ -249,7 +260,7 @@ export default function ChatNew() {
           }}
           onRename={async (id, newName) => {
             try {
-              const res = await fetch(`/api/conversations/${id}`, {
+              const res = await authFetch(`/api/conversations/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: newName }),

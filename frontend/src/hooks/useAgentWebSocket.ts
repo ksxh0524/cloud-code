@@ -24,9 +24,19 @@ export function useAgentWebSocket({
   const retryCountRef = useRef(0)
   const maxRetries = 10
 
+  // Use refs for callbacks to avoid triggering reconnect on reference change
+  const onMessageRef = useRef(onMessage)
+  const onErrorRef = useRef(onError)
+  useEffect(() => { onMessageRef.current = onMessage }, [onMessage])
+  useEffect(() => { onErrorRef.current = onError }, [onError])
+
   const connect = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws`
+    let wsUrl = `${protocol}//${window.location.host}/ws`
+    const apiKey = localStorage.getItem('api_key')
+    if (apiKey) {
+      wsUrl += `?apiKey=${encodeURIComponent(apiKey)}`
+    }
 
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
@@ -56,7 +66,7 @@ export function useAgentWebSocket({
         if (message.type === 'connected' || message.type === 'initialized') {
           setSessionId(message.data?.sessionId)
         } else {
-          onMessage(message)
+          onMessageRef.current(message)
         }
       } catch (error) {
         console.error('Failed to parse message:', error)
@@ -64,7 +74,7 @@ export function useAgentWebSocket({
     }
 
     ws.onerror = () => {
-      onError?.(new Error('WebSocket connection error'))
+      onErrorRef.current?.(new Error('WebSocket connection error'))
     }
 
     ws.onclose = () => {
@@ -80,17 +90,17 @@ export function useAgentWebSocket({
         }, delay)
       }
     }
-  }, [workDir, onMessage, onError])
+  }, [workDir])
 
   const sendMessage = useCallback(
     (message: any) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify(message))
       } else {
-        onError?.(new Error('WebSocket is not connected'))
+        onErrorRef.current?.(new Error('WebSocket is not connected'))
       }
     },
-    [onError]
+    []
   )
 
   useEffect(() => {

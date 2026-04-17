@@ -1,5 +1,6 @@
 export type CliType = 'claude' | 'opencode'
 
+// Keep in sync with backend/src/store.ts Conversation interface
 export interface Conversation {
   id: string
   name: string
@@ -13,8 +14,7 @@ export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
-  type?: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'stream'
-  toolCalls?: ToolCall[]
+  type?: 'text' | 'thinking' | 'tool_use' | 'tool_result'
   metadata?: {
     toolName?: string
     toolInput?: Record<string, unknown>
@@ -25,8 +25,8 @@ export interface Message {
 
 export interface ToolCall {
   name: string
-  input?: any
-  output?: any
+  input?: Record<string, unknown>
+  output?: Record<string, unknown>
   status: 'running' | 'completed' | 'error'
 }
 

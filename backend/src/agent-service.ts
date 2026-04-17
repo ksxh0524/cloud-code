@@ -1,11 +1,19 @@
 import { query, type Query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentConfig, WebSocketMessage } from './types.js'
+import { logger } from './logger.js'
+
+interface SessionData {
+  query: Query | null
+  config: AgentConfig
+}
+
+const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'TERM', 'SHELL', 'TMPDIR', 'USER']
 
 export class AgentService {
-  private sessions: Map<string, Query | null> = new Map()
+  private sessions: Map<string, SessionData> = new Map()
 
-  async createSession(sessionId: string, _config: AgentConfig): Promise<void> {
-    this.sessions.set(sessionId, null)
+  async createSession(sessionId: string, config: AgentConfig): Promise<void> {
+    this.sessions.set(sessionId, { query: null, config })
   }
 
   async streamMessage(
@@ -14,33 +22,45 @@ export class AgentService {
     config: AgentConfig,
     onMessage: (msg: WebSocketMessage) => void
   ): Promise<void> {
-    const envEntries = Object.entries(process.env).filter(([, v]) => v !== undefined) as [string, string][]
-    const env: Record<string, string> = {
-      ...Object.fromEntries(envEntries),
-      ...config.env,
+    // Use stored config from init, fall back to prompt-provided config
+    const stored = this.sessions.get(sessionId)
+    const mergedConfig = stored?.config ?? config
+
+    const env: Record<string, string> = {}
+    for (const key of SAFE_ENV_KEYS) {
+      const val = process.env[key]
+      if (val) env[key] = val
     }
+    Object.assign(env, mergedConfig.env)
 
     const options = {
-      cwd: config.workDir,
+      cwd: mergedConfig.workDir,
       env,
-      allowedTools: config.allowedTools || ['Read', 'Edit', 'Bash', 'Glob', 'Grep'],
-      permissionMode: config.permissionMode || 'acceptEdits',
-      maxTurns: config.maxTurns || 50,
+      allowedTools: mergedConfig.allowedTools || ['Read', 'Edit', 'Bash', 'Glob', 'Grep'],
+      permissionMode: mergedConfig.permissionMode || 'acceptEdits',
+      maxTurns: mergedConfig.maxTurns || 50,
       persistSession: true,
       includePartialMessages: true,
     }
 
     try {
+      // Close any existing query iterator to prevent leaks
+      const existing = this.sessions.get(sessionId)
+      if (existing?.query) {
+        existing.query.close?.()
+      }
+
       const queryIterator = query({ prompt, options })
-      this.sessions.set(sessionId, queryIterator)
+      this.sessions.set(sessionId, { query: queryIterator, config: mergedConfig })
 
       for await (const message of queryIterator) {
-        const wsMessage = this.convertToWebSocketMessage(message, sessionId)
-        onMessage(wsMessage)
+        onMessage(this.convertToWebSocketMessage(message, sessionId))
       }
 
       onMessage({ type: 'done', data: null, sessionId })
+      logger.info({ sessionId }, 'Stream completed')
     } catch (error) {
+      logger.error({ err: error, sessionId }, 'Stream error')
       onMessage({
         type: 'error',
         data: error instanceof Error ? error.message : 'Unknown error',
@@ -57,31 +77,21 @@ export class AgentService {
       case 'assistant':
         return {
           type: 'message',
-          data: {
-            role: 'assistant',
-            content: this.extractContent(message),
-            type: 'text',
-          },
+          data: { role: 'assistant', content: this.extractContent(message), type: 'text' },
           sessionId,
         }
 
       case 'tool_use':
         return {
           type: 'tool_call',
-          data: {
-            toolName: raw.tool_name,
-            toolInput: raw.tool_input,
-          },
+          data: { toolName: raw.tool_name, toolInput: raw.tool_input },
           sessionId,
         }
 
       case 'tool_result':
         return {
           type: 'tool_result',
-          data: {
-            toolName: raw.tool_name,
-            toolOutput: raw.tool_output,
-          },
+          data: { toolName: raw.tool_name, toolOutput: raw.tool_output },
           sessionId,
         }
 
@@ -105,11 +115,7 @@ export class AgentService {
       default:
         return {
           type: 'message',
-          data: {
-            role: 'system',
-            content: JSON.stringify(message),
-            type: 'text',
-          },
+          data: { role: 'system', content: JSON.stringify(message), type: 'text' },
           sessionId,
         }
     }
@@ -129,17 +135,18 @@ export class AgentService {
   }
 
   async closeSession(sessionId: string): Promise<void> {
-    const q = this.sessions.get(sessionId)
-    if (q) {
-      q.close?.()
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.query?.close?.()
       this.sessions.delete(sessionId)
+      logger.info({ sessionId }, 'Session closed')
     }
   }
 
   interruptSession(sessionId: string): void {
-    const q = this.sessions.get(sessionId)
-    if (q && typeof q.interrupt === 'function') {
-      q.interrupt()
+    const session = this.sessions.get(sessionId)
+    if (session?.query && typeof session.query.interrupt === 'function') {
+      session.query.interrupt()
     }
   }
 }

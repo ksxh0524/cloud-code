@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import CustomSelect from './CustomSelect'
+import { authFetch } from '../lib/fetch'
 
 interface CliType {
   type: 'claude' | 'opencode'
@@ -48,7 +49,7 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
   // 加载 CLI 类型并检查安装状态
   const loadCliTypes = async () => {
     try {
-      const res = await fetch('/api/cli-types')
+      const res = await authFetch('/api/cli-types')
       const types: CliType[] = await res.json()
       setCliTypes(types)
       
@@ -57,7 +58,7 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
       const status: Record<string, CliCheckResult> = {}
       for (const cli of types) {
         try {
-          const checkRes = await fetch(`/api/cli-check/${cli.type}`)
+          const checkRes = await authFetch(`/api/cli-check/${cli.type}`)
           status[cli.type] = await checkRes.json()
         } catch (e) {
           status[cli.type] = { installed: false, error: '检查失败' }
@@ -80,7 +81,7 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
   const loadWorkDirs = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/workdirs')
+      const res = await authFetch('/api/workdirs')
       const data = await res.json()
       setWorkDirs(data)
       // 默认选中配置的工作目录
@@ -99,7 +100,7 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
   // 加载子目录
   const loadSubDirs = async (path: string) => {
     try {
-      const res = await fetch(`/api/directories?path=${encodeURIComponent(path)}`)
+      const res = await authFetch(`/api/directories?path=${encodeURIComponent(path)}`)
       const data = await res.json()
       setSubDirs(data)
       setSelectedSubDir('')

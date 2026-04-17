@@ -16,17 +16,19 @@ Cloud Code is a mobile-optimized web interface for Claude Code. Users interact w
 ## Common Commands
 
 ```bash
-# Install all dependencies
+# Install all dependencies (root installs both workspaces)
 pnpm install
-cd backend && pnpm install
 
 # Development (two terminals)
-cd backend && pnpm dev          # Backend on port 18765
-pnpm dev                        # Frontend on port 18766
+cd backend && pnpm dev          # Backend on port 18765 (tsx watch)
+pnpm dev                        # Frontend on port 18766 (Vite)
+
+# Development (both at once)
+pnpm dev:all
 
 # Build
-pnpm build                      # Frontend production build
-cd backend && pnpm build        # Backend TypeScript compile
+pnpm build                      # Frontend + Backend production build
+cd backend && pnpm build        # Backend TypeScript compile only
 
 # Test
 npx playwright test                          # All E2E tests
@@ -42,22 +44,20 @@ pnpm format
 
 ### Backend (`backend/src/`)
 
-- `server.ts` — Express + WebSocket server on port 18765. REST routes at `/api/*`, WebSocket at root path.
-- `agent-service.ts` — Claude Agent SDK integration. Calls `query()` and streams results back via WebSocket.
-- `routes.ts` — REST API: conversations CRUD, CLI type checking, work directory listing, app config.
-- `store.ts` — JSON file persistence for conversations and config. Reads/writes `~/.cloud-code/data.json`.
-- `types.ts` — Session, Message, WebSocketMessage, AgentConfig interfaces.
+- `server.ts` — Express + WebSocket server on port 18765. REST routes at `/api/*`, WebSocket at `/ws`. Pino HTTP request logging. Graceful shutdown with signal handling.
+- `agent-service.ts` — Claude Agent SDK integration. Singleton `AgentService` manages sessions in a `Map`. Calls `query()` with `persistSession: true`, streams `SDKMessage`s via `for await...of`, converts each to `WebSocketMessage`. Default tools: `Read`, `Edit`, `Bash`, `Glob`, `Grep`. Default max turns: 50.
+- `routes.ts` — REST API: conversations CRUD, CLI type checking, work directory listing, app config. Zod schemas validate all mutating endpoints. Uses `execFile` (not `execSync`) for CLI version checks.
+- `store.ts` — JSON file persistence at `~/.cloud-code/data.json`. Async mutex serializes concurrent writes. All write operations are async and use `withLock()`.
+- `types.ts` — `WebSocketMessage` and `AgentConfig` interfaces. (Session/Message types live in frontend only.)
+- `logger.ts` — Shared pino logger with `pino-pretty` transport. Configured via `LOG_LEVEL` env var (default `info`).
 
 ### Frontend (`frontend/src/`)
 
 - `App.tsx` — Routes: `/` → ChatNew, `/settings` → Settings
 - `pages/ChatNew.tsx` — Main chat page. Manages conversations, messages, WebSocket via `useAgentWebSocket`.
 - `pages/Settings.tsx` — Feishu config + default work directory settings.
-- `components/ConversationList.tsx` — Sidebar list with rename/delete.
-- `components/NewConversationModal.tsx` — CLI selector + directory picker.
 - `components/MessageList.tsx` / `MessageItem.tsx` / `ToolCall.tsx` / `CodeBlock.tsx` — Message rendering.
 - `components/InputBox.tsx` — Auto-resizing textarea with send/interrupt.
-- `components/Modal.tsx` / `CustomSelect.tsx` — UI primitives.
 - `hooks/useAgentWebSocket.ts` — WebSocket hook, connects on mount, auto-reconnects.
 
 ### Data Flow
@@ -101,14 +101,13 @@ Vite proxies `/api` to the backend in dev mode. WebSocket connects directly via 
 ## Code Style
 
 - No semicolons, single quotes, 2-space indentation
-- Python: 4-space indentation (per `.editorconfig`)
 - Components: PascalCase, hooks: camelCase with `use` prefix
-- Types in `frontend/src/types.ts` and `backend/src/types.ts`
+- Backend uses ESM (`"type": "module"` in package.json)
 - All CSS is inline (JSX `<style>` template literals) — no external CSS framework
 - Mobile-first: 44px min touch targets, `env(safe-area-inset-*)` support
 
 ## Environment
 
 - Node.js 18+
-- Backend requires `.env` with `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`
-- Supports third-party APIs (e.g., ZhiPu/智谱) via base URL override
+- Backend `.env` (see `backend/.env.example`): `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `PORT` (default 18765), optional `LOG_LEVEL` (default `info`)
+- Supports third-party APIs (e.g., ZhiPu/智谱) via `ANTHROPIC_BASE_URL` override

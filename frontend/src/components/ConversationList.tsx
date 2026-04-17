@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Conversation } from '../types'
 
 interface ConversationListProps {
@@ -44,26 +44,34 @@ export default function ConversationList({ conversations, currentId, onSelect, o
     setDeleteTargetId(null)
   }
 
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!showMenu) return
+    const handler = () => setShowMenu(null)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [showMenu])
+
   return (
     <div className="conversation-list">
       {/* 删除确认弹窗 */}
       {showDeleteModal && (
-        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">确认删除</div>
-            <div className="modal-body">
+        <div className="conv-delete-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="conv-delete-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="conv-delete-header">确认删除</div>
+            <div className="conv-delete-body">
               <p>确定要删除这个会话吗？</p>
             </div>
-            <div className="modal-actions">
+            <div className="conv-delete-actions">
               <button
                 onClick={() => setShowDeleteModal(false)}
-                className="modal-btn modal-btn-cancel"
+                className="conv-delete-btn conv-delete-btn-cancel"
               >
                 取消
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                className="modal-btn modal-btn-confirm"
+                className="conv-delete-btn conv-delete-btn-confirm"
               >
                 删除
               </button>
@@ -71,7 +79,7 @@ export default function ConversationList({ conversations, currentId, onSelect, o
           </div>
 
           <style>{`
-            .modal-overlay {
+            .conv-delete-overlay {
               position: fixed;
               top: 0;
               left: 0;
@@ -85,7 +93,7 @@ export default function ConversationList({ conversations, currentId, onSelect, o
               padding: 16px;
             }
 
-            .modal-content {
+            .conv-delete-dialog {
               background: #ffffff;
               border-radius: 12px;
               padding: 24px;
@@ -93,26 +101,26 @@ export default function ConversationList({ conversations, currentId, onSelect, o
               max-width: 90vw;
             }
 
-            .modal-header {
+            .conv-delete-header {
               font-size: 17px;
               font-weight: 600;
               color: #2e2e2e;
               margin-bottom: 16px;
             }
 
-            .modal-body p {
+            .conv-delete-body p {
               font-size: 15px;
               color: #8e8ea0;
             }
 
-            .modal-actions {
+            .conv-delete-actions {
               display: flex;
               gap: 12px;
               justify-content: flex-end;
               margin-top: 20px;
             }
 
-            .modal-btn {
+            .conv-delete-btn {
               padding: 12px 20px;
               border-radius: 8px;
               font-size: 16px;
@@ -120,23 +128,23 @@ export default function ConversationList({ conversations, currentId, onSelect, o
               min-height: 48px;
             }
 
-            .modal-btn-cancel {
+            .conv-delete-btn-cancel {
               background: #f7f7f8;
               border: 1px solid #e5e5e5;
               color: #2e2e2e;
             }
 
-            .modal-btn-cancel:active {
+            .conv-delete-btn-cancel:active {
               background: #e8e8ea;
             }
 
-            .modal-btn-confirm {
+            .conv-delete-btn-confirm {
               background: #ef4444;
               border: none;
               color: #ffffff;
             }
 
-            .modal-btn-confirm:active {
+            .conv-delete-btn-confirm:active {
               background: #dc2626;
             }
           `}</style>

@@ -1,39 +1,73 @@
+import { useState } from 'react'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+
 interface CodeBlockProps {
   code: string
   language?: string
 }
 
 export default function CodeBlock({ code, language = 'text' }: CodeBlockProps) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div className="code-block">
-      <pre>
-        <code className={`language-${language}`}>{code}</code>
-      </pre>
+      <div className="code-block-header">
+        <span className="code-block-lang">{language}</span>
+        <button className="code-block-copy" onClick={handleCopy}>
+          {copied ? '✓ 已复制' : '复制'}
+        </button>
+      </div>
+      <SyntaxHighlighter language={language} style={oneDark} customStyle={{
+        margin: 0,
+        borderRadius: '0 0 6px 6px',
+        fontSize: '13px',
+        lineHeight: '1.5',
+      }}>
+        {code}
+      </SyntaxHighlighter>
 
       <style>{`
         .code-block {
-          background: #f7f7f8;
-          border: 1px solid #e5e5e5;
           border-radius: 6px;
           overflow: hidden;
           margin: 8px 0;
+          border: 1px solid #e5e5e5;
         }
 
-        .code-block pre {
-          margin: 0;
-          padding: 12px;
-          overflow-x: auto;
+        .code-block-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 6px 12px;
+          background: #2d2d2d;
+          font-size: 12px;
         }
 
-        .code-block code {
-          font-family: 'Söhne Mono', 'Monaco', 'Courier New', monospace;
-          font-size: 13px;
-          line-height: 1.5;
-          color: #2e2e2e;
+        .code-block-lang {
+          color: #8e8ea0;
+          text-transform: uppercase;
         }
 
-        .code-block code::selection {
-          background: rgba(16, 163, 127, 0.2);
+        .code-block-copy {
+          background: none;
+          border: none;
+          color: #8e8ea0;
+          cursor: pointer;
+          font-size: 12px;
+          padding: 2px 6px;
+          min-height: unset;
+          min-width: unset;
+        }
+
+        .code-block-copy:hover {
+          color: #ffffff;
         }
       `}</style>
     </div>

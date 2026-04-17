@@ -34,14 +34,7 @@ button, a, input, select, textarea {
 }
 
 button {
-  min-height: 44px;
-  min-width: 44px;
-}
-
-a {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
+  cursor: pointer;
 }
 
 ::-webkit-scrollbar {

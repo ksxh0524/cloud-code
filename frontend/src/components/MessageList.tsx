@@ -1,4 +1,3 @@
-import { useRef, useEffect } from 'react'
 import { Message } from '../types'
 import MessageItem from './MessageItem'
 
@@ -7,18 +6,8 @@ interface MessageListProps {
 }
 
 export default function MessageList({ messages }: MessageListProps) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    // 自动滚动到底部
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: 'smooth',
-    })
-  }, [messages])
-
   return (
-    <div ref={scrollRef} className="message-list">
+    <div className="message-list">
       {messages.length === 0 ? (
         <div className="empty-messages">
           <p>开始新的对话...</p>
@@ -35,8 +24,6 @@ export default function MessageList({ messages }: MessageListProps) {
           max-width: 100%;
           margin: 0 auto;
           width: 100%;
-          overflow-y: auto;
-          padding: 16px;
           padding-bottom: 100px;
         }
 
