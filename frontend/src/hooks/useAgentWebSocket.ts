@@ -21,25 +21,20 @@ export function useAgentWebSocket({
   const [sessionId, setSessionId] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const isReconnectingRef = useRef(false)
+  const retryCountRef = useRef(0)
+  const maxRetries = 10
 
   const connect = useCallback(() => {
-    if (isReconnectingRef.current) return
-    isReconnectingRef.current = true
-
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}`
-    console.log('Connecting to WebSocket:', wsUrl)
+    const wsUrl = `${protocol}//${window.location.host}/ws`
 
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onopen = () => {
-      console.log('WebSocket connected')
       setIsConnected(true)
-      isReconnectingRef.current = false
+      retryCountRef.current = 0
 
-      // 发送初始化消息
       ws.send(
         JSON.stringify({
           type: 'init',
@@ -57,12 +52,9 @@ export function useAgentWebSocket({
     ws.onmessage = event => {
       try {
         const message = JSON.parse(event.data)
-        console.log('Received message:', message.type)
 
-        if (message.type === 'connected') {
-          setSessionId(message.data.sessionId)
-        } else if (message.type === 'initialized') {
-          setSessionId(message.data.sessionId)
+        if (message.type === 'connected' || message.type === 'initialized') {
+          setSessionId(message.data?.sessionId)
         } else {
           onMessage(message)
         }
@@ -71,22 +63,21 @@ export function useAgentWebSocket({
       }
     }
 
-    ws.onerror = error => {
-      console.error('WebSocket error:', error)
+    ws.onerror = () => {
       onError?.(new Error('WebSocket connection error'))
     }
 
     ws.onclose = () => {
-      console.log('WebSocket disconnected')
       setIsConnected(false)
-      isReconnectingRef.current = false
+      wsRef.current = null
 
-      // 自动重连
-      if (!reconnectTimeoutRef.current) {
+      if (retryCountRef.current < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000)
+        retryCountRef.current++
         reconnectTimeoutRef.current = setTimeout(() => {
-          reconnectTimeoutRef.current = undefined as unknown as ReturnType<typeof setTimeout>
+          reconnectTimeoutRef.current = undefined
           connect()
-        }, 3000)
+        }, delay)
       }
     }
   }, [workDir, onMessage, onError])
@@ -96,7 +87,6 @@ export function useAgentWebSocket({
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify(message))
       } else {
-        console.error('WebSocket is not connected')
         onError?.(new Error('WebSocket is not connected'))
       }
     },
@@ -116,9 +106,5 @@ export function useAgentWebSocket({
     }
   }, [connect])
 
-  return {
-    sendMessage,
-    isConnected,
-    sessionId,
-  }
+  return { sendMessage, isConnected, sessionId }
 }

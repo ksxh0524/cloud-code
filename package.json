@@ -3,11 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "frontend"
+    "frontend",
+    "backend"
   ],
   "scripts": {
     "dev": "pnpm --filter frontend dev",
-    "build": "pnpm --filter frontend build",
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:all": "pnpm -r --parallel --filter frontend --filter backend run dev",
+    "build": "pnpm --filter frontend build && pnpm --filter backend build",
     "lint": "eslint frontend/src --ext .ts,.tsx --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint frontend/src --ext .ts,.tsx --fix",
     "format": "prettier --write \"frontend/src/**/*.{ts,tsx,css,json}\"",

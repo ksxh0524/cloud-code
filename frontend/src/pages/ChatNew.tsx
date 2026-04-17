@@ -7,6 +7,11 @@ import InputBox from '../components/InputBox'
 import { useAgentWebSocket } from '../hooks/useAgentWebSocket'
 import type { Conversation, Message } from '../types'
 
+let msgCounter = 0
+function nextMsgId() {
+  return `${Date.now()}-${msgCounter++}`
+}
+
 export default function ChatNew() {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [showSidebar, setShowSidebar] = useState(false)
@@ -15,26 +20,10 @@ export default function ChatNew() {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  void isMobile
 
   const currentConversation = conversations.find(c => c.id === conversationId)
 
-  // Detect mobile
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(
-        window.innerWidth <= 768 ||
-          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      )
-    }
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
-
-  // Load conversations
   useEffect(() => {
     loadConversations()
   }, [])
@@ -42,8 +31,8 @@ export default function ChatNew() {
   const loadConversations = async () => {
     try {
       const res = await fetch('/api/conversations')
-      const data = await res.json()
-      setConversations(data)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setConversations(await res.json())
     } catch (error) {
       console.error('Failed to load conversations:', error)
     }
@@ -55,7 +44,7 @@ export default function ChatNew() {
         setMessages(prev => [
           ...prev,
           {
-            id: Date.now().toString(),
+            id: nextMsgId(),
             role: msg.data.role,
             content: msg.data.content,
             type: msg.data.type,
@@ -83,7 +72,7 @@ export default function ChatNew() {
         setMessages(prev => [
           ...prev,
           {
-            id: Date.now().toString(),
+            id: nextMsgId(),
             role: 'assistant',
             content: msg.data.content,
             type: 'thinking',
@@ -96,7 +85,7 @@ export default function ChatNew() {
         setMessages(prev => [
           ...prev,
           {
-            id: Date.now().toString(),
+            id: nextMsgId(),
             role: 'assistant',
             content: `Using: ${msg.data.toolName}`,
             type: 'tool_use',
@@ -113,7 +102,7 @@ export default function ChatNew() {
         setMessages(prev => [
           ...prev,
           {
-            id: Date.now().toString(),
+            id: nextMsgId(),
             role: 'tool',
             content: msg.data.toolOutput,
             type: 'tool_result',
@@ -133,7 +122,7 @@ export default function ChatNew() {
         setMessages(prev => [
           ...prev,
           {
-            id: Date.now().toString(),
+            id: nextMsgId(),
             role: 'system',
             content: `Error: ${msg.data}`,
             type: 'text',
@@ -148,24 +137,22 @@ export default function ChatNew() {
   const { sendMessage, isConnected } = useAgentWebSocket({
     workDir: currentConversation?.workDir || '',
     onMessage: handleIncomingMessage,
-    onError: error => {
-      console.error('WebSocket error:', error)
-      setIsStreaming(false)
-    },
+    onError: () => setIsStreaming(false),
   })
 
   const handleSendMessage = () => {
     if (!inputValue.trim() || isStreaming || !currentConversation) return
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputValue,
-      type: 'text',
-      timestamp: Date.now(),
-    }
-
-    setMessages(prev => [...prev, userMessage])
+    setMessages(prev => [
+      ...prev,
+      {
+        id: nextMsgId(),
+        role: 'user',
+        content: inputValue,
+        type: 'text',
+        timestamp: Date.now(),
+      },
+    ])
     setInputValue('')
     setIsStreaming(true)
 
@@ -183,7 +170,7 @@ export default function ChatNew() {
     setIsStreaming(false)
   }
 
-  const handleCreateConversation = async (workDir: string) => {
+  const handleCreateConversation = async (workDir: string, cliType: string = 'claude') => {
     const dirName = workDir.split('/').filter(Boolean).pop() || workDir
     const sameDirConversations = conversations.filter(c => c.workDir === workDir)
     let conversationName = dirName
@@ -200,8 +187,9 @@ export default function ChatNew() {
       const res = await fetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: conversationName, workDir, cliType: 'claude' }),
+        body: JSON.stringify({ name: conversationName, workDir, cliType }),
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const conv = await res.json()
       setConversationId(conv.id)
       setShowSidebar(false)
@@ -212,15 +200,10 @@ export default function ChatNew() {
     }
   }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
   useEffect(() => {
-    scrollToBottom()
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Switch conversation
   const handleSelectConversation = (id: string) => {
     setConversationId(id)
     setShowSidebar(false)
@@ -243,7 +226,7 @@ export default function ChatNew() {
             + 新建对话
           </button>
           <button className="close-sidebar" onClick={() => setShowSidebar(false)}>
-            ←
+            &larr;
           </button>
         </div>
 
@@ -251,10 +234,10 @@ export default function ChatNew() {
           conversations={conversations}
           currentId={conversationId}
           onSelect={handleSelectConversation}
-          onCreate={() => setShowNewModal(true)}
           onDelete={async id => {
             try {
-              await fetch(`/api/conversations/${id}`, { method: 'DELETE' })
+              const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' })
+              if (!res.ok) throw new Error(`HTTP ${res.status}`)
               if (id === conversationId) {
                 setConversationId(null)
                 setMessages([])
@@ -266,11 +249,12 @@ export default function ChatNew() {
           }}
           onRename={async (id, newName) => {
             try {
-              await fetch(`/api/conversations/${id}`, {
+              const res = await fetch(`/api/conversations/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: newName }),
               })
+              if (!res.ok) throw new Error(`HTTP ${res.status}`)
               setConversations(prev => prev.map(c => (c.id === id ? { ...c, name: newName } : c)))
             } catch (error) {
               console.error('Rename failed:', error)
@@ -284,15 +268,15 @@ export default function ChatNew() {
             <span>{isConnected ? '已连接' : '未连接'}</span>
           </div>
           <Link to="/settings" className="settings-link" onClick={() => setShowSidebar(false)}>
-            ⚙️ 设置
+            设置
           </Link>
         </div>
       </aside>
 
       <main className="main-content">
         <header className="chat-header">
-          <button className="menu-button" onClick={() => setShowSidebar(true)}>
-            ☰
+          <button className="menu-button" onClick={() => setShowSidebar(true)} aria-label="打开菜单">
+            &#9776;
           </button>
           <div className="chat-title">
             {currentConversation ? currentConversation.name : '请选择或创建会话'}
@@ -300,7 +284,7 @@ export default function ChatNew() {
           <div className="header-actions">
             {isStreaming && (
               <button className="interrupt-btn" onClick={handleInterrupt}>
-                ⏹ 停止
+                停止
               </button>
             )}
           </div>
@@ -354,7 +338,7 @@ export default function ChatNew() {
       <style>{`
         .chat-container {
           display: flex;
-          width: 100vw;
+          width: 100%;
           height: 100vh;
           overflow: hidden;
           background: #ffffff;

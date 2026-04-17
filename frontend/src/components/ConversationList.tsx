@@ -5,12 +5,11 @@ interface ConversationListProps {
   conversations: Conversation[]
   currentId: string | null
   onSelect: (id: string) => void
-  onCreate: () => void
   onDelete: (id: string) => void
   onRename: (id: string, newName: string) => void
 }
 
-export default function ConversationList({ conversations, currentId, onSelect, onCreate: _onCreate, onDelete, onRename }: ConversationListProps) {
+export default function ConversationList({ conversations, currentId, onSelect, onDelete, onRename }: ConversationListProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [showMenu, setShowMenu] = useState<string | null>(null)

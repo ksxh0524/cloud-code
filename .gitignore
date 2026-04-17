@@ -5,18 +5,10 @@ node_modules/
 # Build outputs
 backend/dist/
 frontend/dist/
-backend_py/app/__pycache__/
-backend_py/**/__pycache__/
-backend_py/**/*.pyc
-backend_py/**/*.pyo
-backend_py/.pytest_cache/
-backend_py/.ruff_cache/
 
 # Virtual environments
 venv/
 .venv/
-env/
-.env/
 
 # IDE
 .idea/
@@ -35,12 +27,6 @@ npm-debug.log*
 test-results/
 test/screenshots/
 playwright-report/
-.pytest_cache/
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
 
 # Environment files
 .env
@@ -50,33 +36,3 @@ playwright-report/
 # OS
 Thumbs.db
 .DS_Store
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Jupyter
-.ipynb_checkpoints
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json

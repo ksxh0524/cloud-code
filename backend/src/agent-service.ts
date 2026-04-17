@@ -2,18 +2,10 @@ import { query, type Query, type SDKMessage } from '@anthropic-ai/claude-agent-s
 import type { AgentConfig, WebSocketMessage } from './types.js'
 
 export class AgentService {
-  private sessions: Map<string, Query> = new Map()
+  private sessions: Map<string, Query | null> = new Map()
 
-  async createSession(sessionId: string, config: AgentConfig): Promise<void> {
-    // 配置环境变量，支持智谱等第三方 API
-    const env: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-      ...config.env,
-    }
-
-    // 预创建一个 query 实例，但不发送消息
-    // 实际使用时通过 streamMessage 发送
-    this.sessions.set(sessionId, null as unknown as Query)
+  async createSession(sessionId: string, _config: AgentConfig): Promise<void> {
+    this.sessions.set(sessionId, null)
   }
 
   async streamMessage(
@@ -22,8 +14,9 @@ export class AgentService {
     config: AgentConfig,
     onMessage: (msg: WebSocketMessage) => void
   ): Promise<void> {
+    const envEntries = Object.entries(process.env).filter(([, v]) => v !== undefined) as [string, string][]
     const env: Record<string, string> = {
-      ...(process.env as Record<string, string>),
+      ...Object.fromEntries(envEntries),
       ...config.env,
     }
 
@@ -34,7 +27,7 @@ export class AgentService {
       permissionMode: config.permissionMode || 'acceptEdits',
       maxTurns: config.maxTurns || 50,
       persistSession: true,
-      includePartialMessages: true, // 启用流式消息
+      includePartialMessages: true,
     }
 
     try {
@@ -46,12 +39,7 @@ export class AgentService {
         onMessage(wsMessage)
       }
 
-      // 发送完成信号
-      onMessage({
-        type: 'done',
-        data: null,
-        sessionId,
-      })
+      onMessage({ type: 'done', data: null, sessionId })
     } catch (error) {
       onMessage({
         type: 'error',
@@ -62,15 +50,8 @@ export class AgentService {
   }
 
   private convertToWebSocketMessage(message: SDKMessage, sessionId: string): WebSocketMessage {
-    // 根据 SDK 消息类型转换为 WebSocket 消息
-    // SDK 消息类型包括：
-    // - SystemMessage
-    // - AssistantMessage
-    // - UserMessage
-    // - StreamEvent
-    // - ResultMessage
-
     const msgType = message.type as string
+    const raw = message as Record<string, unknown>
 
     switch (msgType) {
       case 'assistant':
@@ -88,8 +69,8 @@ export class AgentService {
         return {
           type: 'tool_call',
           data: {
-            toolName: (message as any).tool_name,
-            toolInput: (message as any).tool_input,
+            toolName: raw.tool_name,
+            toolInput: raw.tool_input,
           },
           sessionId,
         }
@@ -98,27 +79,26 @@ export class AgentService {
         return {
           type: 'tool_result',
           data: {
-            toolName: (message as any).tool_name,
-            toolOutput: (message as any).tool_output,
+            toolName: raw.tool_name,
+            toolOutput: raw.tool_output,
           },
           sessionId,
         }
 
-      case 'stream_event':
+      case 'stream_event': {
+        const delta = (raw.event as Record<string, unknown>)?.delta
+        const text = typeof delta === 'string' ? delta : (delta as Record<string, unknown>)?.text || ''
         return {
           type: 'stream',
-          data: {
-            delta: (message as any).event?.delta,
-          },
+          data: { delta: { text: String(text) } },
           sessionId,
         }
+      }
 
       case 'thinking':
         return {
           type: 'thinking',
-          data: {
-            content: (message as any).content,
-          },
+          data: { content: String(raw.content || '') },
           sessionId,
         }
 
@@ -136,25 +116,30 @@ export class AgentService {
   }
 
   private extractContent(message: SDKMessage): string {
-    // 从 SDK 消息中提取文本内容
-    if (typeof message === 'object' && message !== null) {
-      return (message as any).content || JSON.stringify(message)
+    const raw = message as Record<string, unknown>
+    const content = raw.content
+    if (typeof content === 'string') return content
+    if (Array.isArray(content)) {
+      return content
+        .filter((block: Record<string, unknown>) => block.type === 'text')
+        .map((block: Record<string, unknown>) => block.text)
+        .join('')
     }
-    return String(message)
+    return JSON.stringify(message)
   }
 
   async closeSession(sessionId: string): Promise<void> {
-    const query = this.sessions.get(sessionId)
-    if (query) {
-      query.close?.()
+    const q = this.sessions.get(sessionId)
+    if (q) {
+      q.close?.()
       this.sessions.delete(sessionId)
     }
   }
 
   interruptSession(sessionId: string): void {
-    const query = this.sessions.get(sessionId)
-    if (query && typeof query.interrupt === 'function') {
-      query.interrupt()
+    const q = this.sessions.get(sessionId)
+    if (q && typeof q.interrupt === 'function') {
+      q.interrupt()
     }
   }
 }

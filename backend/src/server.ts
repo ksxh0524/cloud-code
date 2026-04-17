@@ -5,35 +5,44 @@ import cors from 'cors'
 import { v4 as uuidv4 } from 'uuid'
 import { agentService } from './agent-service.js'
 import { router } from './routes.js'
-import type { WebSocketMessage, AgentConfig } from './types.js'
+import type { AgentConfig } from './types.js'
 
 const app = express()
 const server = createServer(app)
-const wss = new WebSocketServer({ server })
+const wss = new WebSocketServer({ server, path: '/ws' })
 
-const PORT = process.env.PORT || 18765
+const PORT = parseInt(process.env.PORT || '18765', 10)
 
-// 中间件
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '1mb' }))
 
 // REST API
 app.use('/api', router)
 
-// WebSocket 连接处理
-wss.on('connection', (ws: WebSocket) => {
-  console.log('New WebSocket connection')
+// Safe WebSocket send helper
+function safeSend(ws: WebSocket, data: unknown): void {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data))
+  }
+}
 
+// WebSocket connection handling
+wss.on('connection', (ws: WebSocket) => {
   const sessionId = uuidv4()
 
   ws.on('message', async (data: Buffer) => {
     try {
       const message = JSON.parse(data.toString())
-      console.log('Received message:', message.type)
 
       switch (message.type) {
         case 'init': {
-          const { workDir, env } = message.data
+          const { workDir } = message.data
+          const clientEnv = message.data.env || {}
+          const env: Record<string, string> = {}
+          // Only allow specific env vars from client
+          if (clientEnv.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = clientEnv.ANTHROPIC_BASE_URL
+          if (clientEnv.ANTHROPIC_AUTH_TOKEN) env.ANTHROPIC_AUTH_TOKEN = clientEnv.ANTHROPIC_AUTH_TOKEN
+
           const config: AgentConfig = {
             workDir,
             env: {
@@ -43,28 +52,22 @@ wss.on('connection', (ws: WebSocket) => {
             },
           }
           await agentService.createSession(sessionId, config)
-          ws.send(
-            JSON.stringify({
-              type: 'initialized',
-              data: { sessionId },
-            })
-          )
+          safeSend(ws, { type: 'initialized', data: { sessionId } })
           break
         }
 
         case 'prompt': {
-          const { prompt, workDir, env } = message.data
+          const { prompt, workDir } = message.data
           const config: AgentConfig = {
             workDir,
             env: {
               ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || '',
               ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || '',
-              ...env,
             },
           }
 
-          await agentService.streamMessage(sessionId, prompt, config, (msg: WebSocketMessage) => {
-            ws.send(JSON.stringify(msg))
+          await agentService.streamMessage(sessionId, prompt, config, msg => {
+            safeSend(ws, msg)
           })
           break
         }
@@ -81,45 +84,42 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         default:
-          ws.send(
-            JSON.stringify({
-              type: 'error',
-              data: `Unknown message type: ${message.type}`,
-              sessionId,
-            })
-          )
+          safeSend(ws, { type: 'error', data: `Unknown message type: ${message.type}`, sessionId })
       }
     } catch (error) {
-      console.error('Error handling message:', error)
-      ws.send(
-        JSON.stringify({
-          type: 'error',
-          data: error instanceof Error ? error.message : 'Unknown error',
-          sessionId,
-        })
-      )
+      safeSend(ws, {
+        type: 'error',
+        data: error instanceof Error ? error.message : 'Unknown error',
+        sessionId,
+      })
     }
   })
 
   ws.on('close', async () => {
-    console.log('WebSocket connection closed')
     await agentService.closeSession(sessionId)
   })
 
-  ws.on('error', error => {
-    console.error('WebSocket error:', error)
+  ws.on('error', () => {
+    // Connection errors handled by close event
   })
 
-  ws.send(
-    JSON.stringify({
-      type: 'connected',
-      data: { sessionId },
-    })
-  )
+  safeSend(ws, { type: 'connected', data: { sessionId } })
 })
+
+// Graceful shutdown
+function shutdown() {
+  wss.clients.forEach(ws => ws.close())
+  server.close(() => {
+    process.exit(0)
+  })
+  setTimeout(() => process.exit(1), 5000)
+}
+
+process.on('SIGTERM', shutdown)
+process.on('SIGINT', shutdown)
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
   console.log(`REST API: http://localhost:${PORT}/api`)
-  console.log(`WebSocket: ws://localhost:${PORT}`)
+  console.log(`WebSocket: ws://localhost:${PORT}/ws`)
 })
