@@ -4,105 +4,111 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Cloud Code is a mobile-optimized web interface for using Claude Code CLI or OpenCode CLI from a browser. It provides a terminal-like experience with xterm.js, allowing users to interact with AI coding assistants from their mobile devices.
+Cloud Code is a mobile-optimized web interface for Claude Code. Users interact with the Claude Agent SDK through a browser-based chat UI, with WebSocket streaming for real-time responses.
 
 ## Tech Stack
 
-- **Backend**: Python (FastAPI) + SQLite + pexpect (PTY management)
-- **Frontend**: React 19 + Vite + TypeScript + xterm.js
-- **Communication**: WebSocket for real-time terminal I/O
-- **Testing**: Playwright E2E tests
+- **Backend**: Node.js + Express + `@anthropic-ai/claude-agent-sdk`
+- **Frontend**: React 19 + Vite + TypeScript + `@headlessui/react`
+- **Data**: JSON file at `~/.cloud-code/data.json`
+- **Testing**: Playwright E2E
 
 ## Common Commands
 
-### Development
-
 ```bash
-# Install dependencies
+# Install all dependencies
 pnpm install
+cd backend && pnpm install
 
-# Start backend (port 18765)
-cd backend_py
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 18765 --reload
+# Development (two terminals)
+cd backend && pnpm dev          # Backend on port 18765
+pnpm dev                        # Frontend on port 18766
 
-# Start frontend (port 18766) - in another terminal
-pnpm dev
+# Build
+pnpm build                      # Frontend production build
+cd backend && pnpm build        # Backend TypeScript compile
 
-# Access the app
-open http://localhost:18766
-```
+# Test
+npx playwright test                          # All E2E tests
+npx playwright test test/mobile-ui.spec.ts   # Single file
+npx playwright test --headed                 # Visible browser
 
-### Build & Test
-
-```bash
-# Build frontend for production
-pnpm build
-
-# Run E2E tests (requires running backend)
-npx playwright test
-
-# Run specific test file
-npx playwright test test/python-backend.spec.ts
-
-# Run tests in headed mode
-npx playwright test --headed
+# Lint & format
+pnpm lint && pnpm lint:fix
+pnpm format
 ```
 
 ## Architecture
 
-### Backend (FastAPI)
+### Backend (`backend/src/`)
 
-- `app/main.py` - Application entry, WebSocket endpoint, lifespan management
-- `app/routers/web.py` - REST API routes (conversations, config, sessions)
-- `app/services/cli_service.py` - **Core**: PTY session management using pexpect
-- `app/services/ws_manager.py` - WebSocket client management per conversation
-- `app/database.py` - SQLAlchemy setup with SQLite
-- `app/models/` - SQLAlchemy models (Conversation, Message, Config)
+- `server.ts` — Express + WebSocket server on port 18765. REST routes at `/api/*`, WebSocket at root path.
+- `agent-service.ts` — Claude Agent SDK integration. Calls `query()` and streams results back via WebSocket.
+- `routes.ts` — REST API: conversations CRUD, CLI type checking, work directory listing, app config.
+- `store.ts` — JSON file persistence for conversations and config. Reads/writes `~/.cloud-code/data.json`.
+- `types.ts` — Session, Message, WebSocketMessage, AgentConfig interfaces.
 
-### Frontend (React)
+### Frontend (`frontend/src/`)
 
-- `frontend/src/pages/Chat.tsx` - Main page with sidebar and terminal
-- `frontend/src/components/Terminal.tsx` - **Core**: xterm.js terminal with WebSocket
-- `frontend/src/components/ConversationList.tsx` - Sidebar conversation list
-- `frontend/src/components/NewConversationModal.tsx` - Create new conversation
-- `frontend/src/hooks/useWebSocket.ts` - WebSocket hook for message handling
-- `frontend/src/types.ts` - TypeScript type definitions
+- `App.tsx` — Routes: `/` → ChatNew, `/settings` → Settings
+- `pages/ChatNew.tsx` — Main chat page. Manages conversations, messages, WebSocket via `useAgentWebSocket`.
+- `pages/Settings.tsx` — Feishu config + default work directory settings.
+- `components/ConversationList.tsx` — Sidebar list with rename/delete.
+- `components/NewConversationModal.tsx` — CLI selector + directory picker.
+- `components/MessageList.tsx` / `MessageItem.tsx` / `ToolCall.tsx` / `CodeBlock.tsx` — Message rendering.
+- `components/InputBox.tsx` — Auto-resizing textarea with send/interrupt.
+- `components/Modal.tsx` / `CustomSelect.tsx` — UI primitives.
+- `hooks/useAgentWebSocket.ts` — WebSocket hook, connects on mount, auto-reconnects.
 
-### Key Data Flow
+### Data Flow
 
-1. User creates conversation → POST `/api/conversations` → saved to SQLite
-2. Frontend opens WebSocket to `/ws?conversationId=xxx`
-3. Backend starts PTY process (claude/opencode) via pexpect in work_dir
-4. PTY output → WebSocket → xterm.js renders in browser
-5. User input in xterm → WebSocket → pexpect sends to PTY
+1. User creates conversation → `POST /api/conversations` → saved to JSON file
+2. Frontend opens WebSocket to backend
+3. User sends prompt → WebSocket `prompt` message → `agentService.streamMessage()`
+4. SDK streams messages → WebSocket back to frontend → rendered as MessageItems
+5. Tool calls, thinking, and results all streamed as separate message types
 
-### Session Management
+### WebSocket Protocol
 
-- Sessions are keyed by `conversation_id`
-- Existing running sessions are reused when reconnecting
-- Sessions are terminated when no WebSocket clients remain
-- CLI processes are killed via process group (SIGTERM → SIGKILL)
+Client → Server:
+```json
+{"type": "init", "data": {"workDir": "/path", "env": {...}}}
+{"type": "prompt", "data": {"prompt": "text", "workDir": "/path"}}
+{"type": "interrupt"}
+```
+
+Server → Client:
+```json
+{"type": "connected", "data": {"sessionId": "uuid"}}
+{"type": "message", "data": {"role": "assistant", "content": "...", "type": "text"}}
+{"type": "stream", "data": {"delta": {"text": "chunk"}}}
+{"type": "tool_call", "data": {"toolName": "Bash", "toolInput": {...}}}
+{"type": "tool_result", "data": {"toolName": "Bash", "toolOutput": "..."}}
+{"type": "thinking", "data": {"content": "..."}}
+{"type": "done", "data": null}
+{"type": "error", "data": "error message"}
+```
 
 ## Ports
 
 | Service | Port |
 |---------|------|
-| Frontend (dev) | 18766 |
-| Backend API | 18765 |
-| WebSocket | 18765/ws |
+| Frontend (Vite dev) | 18766 |
+| Backend API + WebSocket | 18765 |
 
-## Environment Requirements
+Vite proxies `/api` to the backend in dev mode. WebSocket connects directly via `window.location.host`.
+
+## Code Style
+
+- No semicolons, single quotes, 2-space indentation
+- Python: 4-space indentation (per `.editorconfig`)
+- Components: PascalCase, hooks: camelCase with `use` prefix
+- Types in `frontend/src/types.ts` and `backend/src/types.ts`
+- All CSS is inline (JSX `<style>` template literals) — no external CSS framework
+- Mobile-first: 44px min touch targets, `env(safe-area-inset-*)` support
+
+## Environment
 
 - Node.js 18+
-- Python 3.10+
-- Claude Code CLI or OpenCode CLI installed
-
-## Documentation
-
-- [API Documentation](docs/API.md) - REST and WebSocket protocols
-- [Architecture](docs/ARCHITECTURE.md) - System design details
-- [Deployment](docs/DEPLOYMENT.md) - Production deployment guide
-- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- Backend requires `.env` with `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`
+- Supports third-party APIs (e.g., ZhiPu/智谱) via base URL override

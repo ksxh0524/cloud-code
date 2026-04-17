@@ -1,26 +1,26 @@
 # Cloud Code
 
-在手机上方便地使用电脑上的 Claude Code CLI。
+在手机上方便地使用 Claude Code。
 
 ## 功能
 
-- 📱 移动端优化的 Web 界面
-- 💬 完整的 Claude Code / OpenCode 对话功能
-- 🛠️ 工具调用可视化（可折叠展开）
-- 📁 支持多会话和目录管理
-- 🤖 飞书机器人集成
-
-## 环境要求
-
-- **Node.js**: 18+
-- **Python**: 3.10+
-- **Claude Code CLI** 或 **OpenCode CLI**
+- 移动端优化的 Web 界面
+- 基于 Claude Agent SDK 的结构化对话
+- 工具调用可视化（可折叠展开）
+- 支持多会话和目录管理
+- 飞书机器人集成
 
 ## 技术栈
 
-- **后端**: Python (FastAPI) + SQLite
+- **后端**: Node.js + Express + Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`)
 - **前端**: React 19 + Vite + TypeScript
-- **通信**: WebSocket
+- **通信**: WebSocket + REST API
+- **测试**: Playwright E2E
+
+## 环境要求
+
+- Node.js 18+
+- Claude Agent SDK 访问权限
 
 ## 快速开始
 
@@ -28,90 +28,62 @@
 # 安装依赖
 pnpm install
 
-# 启动后端
-cd backend_py
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 18765 --reload
+# 配置后端环境变量
+cd backend
+cp .env.example .env
+# 编辑 .env 填入 API 配置
 
-# 启动前端（另一个终端）
+# 启动后端 (port 18765)
+cd backend && pnpm dev
+
+# 启动前端 (port 18766) — 另一个终端
 pnpm dev
 
-# 访问
-# 前端: http://localhost:18766
-# 后端: http://localhost:18765
-# API文档: http://localhost:18765/docs
+# 访问 http://localhost:18766
 ```
 
-## 使用
+### 环境变量
 
-1. 打开 `http://localhost:18766`
-2. 创建新会话，选择工作目录
-3. 开始对话
+在 `backend/.env` 中配置：
+
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `ANTHROPIC_BASE_URL` | API 基础 URL | `https://open.bigmodel.cn/api/anthropic` |
+| `ANTHROPIC_AUTH_TOKEN` | API 认证密钥 | `your-api-key` |
+| `PORT` | 后端端口 | `18765` |
 
 ## 项目结构
 
 ```
 cloud-code/
-├── backend_py/       # FastAPI 后端
-│   ├── app/
-│   │   ├── main.py       # 应用入口
-│   │   ├── routers/      # API 路由
-│   │   ├── services/     # 业务逻辑
-│   │   └── models/       # 数据模型
-│   └── requirements.txt
-├── frontend/         # React 前端
+├── backend/           # Express 后端
 │   └── src/
-│       ├── components/   # UI 组件
-│       ├── hooks/        # 自定义 Hooks
-│       ├── pages/        # 页面
-│       └── types.ts      # 类型定义
-├── docs/             # 文档
-├── test/             # E2E 测试
-└── scripts/          # 工具脚本
+│       ├── server.ts       # 应用入口 + WebSocket
+│       ├── agent-service.ts # Agent SDK 集成
+│       ├── routes.ts       # REST API 路由
+│       ├── store.ts        # JSON 文件数据存储
+│       └── types.ts        # 类型定义
+├── frontend/          # React 前端
+│   └── src/
+│       ├── pages/          # 页面 (ChatNew, Settings)
+│       ├── components/     # UI 组件
+│       ├── hooks/          # useAgentWebSocket 等
+│       └── types.ts        # 类型定义
+├── test/              # Playwright E2E 测试
+└── docs/              # 文档
 ```
-
-## 文档
-
-- [API 文档](docs/API.md) - REST API 和 WebSocket 协议
-- [系统架构](docs/ARCHITECTURE.md) - 技术架构说明
-- [部署指南](docs/DEPLOYMENT.md) - 生产环境部署
-- [故障排查](docs/TROUBLESHOOTING.md) - 常见问题解决
-
-## 配置飞书
-
-在设置页面配置飞书机器人信息：
-- App ID
-- App Secret
-- Verify Token
-- Encrypt Key
-
-## 常见问题
-
-### CLI 未找到
-
-确保已安装 Claude Code CLI:
-```bash
-claude --version
-```
-
-如果未安装，参考 [Claude Code 官方文档](https://docs.anthropic.com/claude-code)。
-
-### WebSocket 连接失败
-
-1. 确认后端正在运行
-2. 检查防火墙设置
-3. 查看 [故障排查指南](docs/TROUBLESHOOTING.md)
 
 ## 开发
 
 ```bash
-# 运行测试
+# 构建前端
+pnpm build
+
+# 运行 E2E 测试
 npx playwright test
 
-# 构建生产版本
-pnpm build
+# 代码检查
+pnpm lint && pnpm format
 ```
 
 ## License

@@ -9,31 +9,19 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:18765',
-        changeOrigin: true
+        changeOrigin: true,
       },
-      '/ws': {
-        target: 'ws://localhost:18765',
-        ws: true,
-        changeOrigin: true
-      }
     },
-    // 支持 SPA 路由
-    strictPort: true
+    strictPort: true,
   },
-  // 构建优化
   build: {
     rollupOptions: {
-      input: {
-        main: './index.html'
-      },
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'xterm-vendor': ['@xterm/xterm', '@xterm/addon-fit']
-        }
-      }
+        },
+      },
     },
-    chunkSizeWarningLimit: 1000,
-    sourcemap: false
-  }
+    sourcemap: false,
+  },
 })

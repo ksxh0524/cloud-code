@@ -38,10 +38,12 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
           bottom: 0;
           background: rgba(0, 0, 0, 0.5);
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: center;
           z-index: 9999;
-          padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+          padding: 16px;
+          padding-top: calc(16px + env(safe-area-inset-top));
+          overflow-y: auto;
         }
 
         .modal-content {
@@ -50,9 +52,10 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
           padding: 24px;
           min-width: 320px;
           max-width: 90vw;
-          max-height: 85vh;
+          max-height: calc(90vh - 32px - env(safe-area-inset-top));
           overflow-y: auto;
           position: relative;
+          margin: auto 0;
         }
 
         .modal-header {
@@ -82,6 +85,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
           display: flex;
           align-items: center;
           justify-content: center;
+          z-index: 1;
         }
 
         .modal-close:hover {
@@ -93,40 +97,26 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
         }
 
         @media (max-width: 768px) {
+          .modal-overlay {
+            padding: 8px;
+            padding-top: calc(8px + env(safe-area-inset-top));
+            align-items: flex-start;
+          }
+
           .modal-content {
             min-width: auto;
-            width: calc(100vw - 16px);
-            max-width: calc(100vw - 16px);
-            max-height: calc(100vh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-            padding: 16px 12px;
-            margin: 8px;
+            width: 100%;
+            max-width: 100%;
+            max-height: calc(100vh - 16px - env(safe-area-inset-top));
+            padding: 16px;
+            margin: 0;
             border-radius: 12px;
           }
 
           .modal-header {
             font-size: 16px;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             padding-right: 40px;
-          }
-          
-          .modal-overlay {
-            padding: 0;
-            align-items: center;
-          }
-        }
-        
-        @media (max-width: 480px) {
-          .modal-content {
-            width: calc(100vw - 16px);
-            max-width: calc(100vw - 16px);
-            max-height: 100vh;
-            margin: 8px;
-            border-radius: 12px;
-            padding: 16px 12px calc(16px + env(safe-area-inset-bottom));
-          }
-          
-          .modal-overlay {
-            align-items: center;
           }
         }
       `}</style>

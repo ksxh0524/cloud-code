@@ -5,19 +5,22 @@ export interface Conversation {
   name: string
   workDir: string
   cliType: CliType
-  feishuChatId?: string
   createdAt: string
   updatedAt: string
 }
 
 export interface Message {
   id: string
-  conversationId: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
+  type?: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'stream'
   toolCalls?: ToolCall[]
-  status: 'pending' | 'streaming' | 'completed' | 'error'
-  createdAt: string
+  metadata?: {
+    toolName?: string
+    toolInput?: Record<string, unknown>
+    toolOutput?: string
+  }
+  timestamp?: number
 }
 
 export interface ToolCall {
@@ -25,8 +28,6 @@ export interface ToolCall {
   input?: any
   output?: any
   status: 'running' | 'completed' | 'error'
-  startTime: string
-  endTime?: string
 }
 
 export interface FeishuConfig {
@@ -39,19 +40,4 @@ export interface FeishuConfig {
 export interface AppConfig {
   feishu: FeishuConfig
   defaultWorkDir: string
-}
-
-export type WSEvent =
-  | { type: 'connected'; conversationId: string }
-  | { type: 'message'; conversationId: string; data: Partial<Message> }
-  | { type: 'tool'; conversationId: string; data: ToolCall }
-  | { type: 'status'; conversationId: string; data: { status: string; cliType?: string; reused?: boolean } }
-  | { type: 'error'; conversationId: string; data: { error: string } }
-
-export interface StreamEvent {
-  type: 'text' | 'tool_start' | 'tool_end' | 'error' | 'done'
-  content?: string
-  toolName?: string
-  toolInput?: any
-  toolOutput?: any
 }

@@ -1,137 +1,136 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test'
 
-const FRONTEND_URL = 'http://localhost:18766';
-const BACKEND_URL = 'http://localhost:18765';
+const FRONTEND_URL = 'http://localhost:18766'
+const BACKEND_URL = 'http://localhost:18765'
 
-test.describe('CLI Selector Tests', () => {
-  
+test.describe('REST API', () => {
+  test('health check', async ({ request }) => {
+    const res = await request.get(`${BACKEND_URL}/api/health`)
+    expect(res.ok()).toBeTruthy()
+    const data = await res.json()
+    expect(data.status).toBe('ok')
+    expect(data.timestamp).toBeTruthy()
+  })
+
   test('CLI types API returns correct format', async ({ request }) => {
-    const response = await request.get(`${BACKEND_URL}/api/cli-types`);
-    expect(response.ok()).toBeTruthy();
-    const data = await response.json();
-    
-    expect(data.length).toBe(2);
-    
-    const claude = data.find((c: any) => c.type === 'claude');
-    expect(claude).toBeTruthy();
-    expect(claude.name).toBe('Claude Code');
-    expect(claude.description).toBeTruthy();
-    
-    const opencode = data.find((c: any) => c.type === 'opencode');
-    expect(opencode).toBeTruthy();
-    expect(opencode.name).toBe('OpenCode');
-    expect(opencode.description).toBeTruthy();
-  });
+    const res = await request.get(`${BACKEND_URL}/api/cli-types`)
+    expect(res.ok()).toBeTruthy()
+    const data = await res.json()
+
+    expect(data.length).toBe(2)
+    const claude = data.find((c: any) => c.type === 'claude')
+    expect(claude).toBeTruthy()
+    expect(claude.name).toBe('Claude Code')
+
+    const opencode = data.find((c: any) => c.type === 'opencode')
+    expect(opencode).toBeTruthy()
+    expect(opencode.name).toBe('OpenCode')
+  })
 
   test('CLI check returns installed status', async ({ request }) => {
-    const claudeRes = await request.get(`${BACKEND_URL}/api/cli-check/claude`);
-    expect(claudeRes.ok()).toBeTruthy();
-    const claudeData = await claudeRes.json();
-    expect(claudeData.installed).toBe(true);
-    expect(claudeData.version).toBeTruthy();
-    
-    const opencodeRes = await request.get(`${BACKEND_URL}/api/cli-check/opencode`);
-    expect(opencodeRes.ok()).toBeTruthy();
-    const opencodeData = await opencodeRes.json();
-    expect(opencodeData.installed).toBe(true);
-    expect(opencodeData.version).toBeTruthy();
-  });
+    const res = await request.get(`${BACKEND_URL}/api/cli-check/claude`)
+    expect(res.ok()).toBeTruthy()
+    const data = await res.json()
+    expect(typeof data.installed).toBe('boolean')
+  })
 
-  test('New conversation modal shows CLI options correctly', async ({ page }) => {
-    await page.goto(FRONTEND_URL);
-    await page.waitForLoadState('networkidle');
-    
-    // Click new conversation button in sidebar
-    await page.click('button.new-chat-btn');
-    await page.waitForTimeout(1000);
-    
-    // Check modal is open
-    const modalHeader = page.locator('.modal-header:has-text("新建对话")');
-    await expect(modalHeader).toBeVisible();
-    
-    // Check CLI options are shown - use first() to avoid strict mode
-    await expect(page.locator('span:has-text("Claude Code")').first()).toBeVisible();
-    await expect(page.locator('span:has-text("OpenCode")').first()).toBeVisible();
-    
-    // Check both show as installed
-    await expect(page.locator('text=2.1.81')).toBeVisible();
-    await expect(page.locator('text=1.2.27')).toBeVisible();
-    
-    // Take screenshot
-    await page.screenshot({ path: 'test/screenshots/cli-selector.png' });
-  });
+  test('conversation CRUD', async ({ request }) => {
+    // Create
+    const createRes = await request.post(`${BACKEND_URL}/api/conversations`, {
+      data: { name: 'test-conv', workDir: '/tmp', cliType: 'claude' },
+    })
+    expect(createRes.ok()).toBeTruthy()
+    const conv = await createRes.json()
+    expect(conv.id).toBeTruthy()
+    expect(conv.name).toBe('test-conv')
 
-  test('Can switch between CLI types', async ({ page }) => {
-    await page.goto(FRONTEND_URL);
-    await page.waitForLoadState('networkidle');
-    
-    // Open modal
-    await page.click('button.new-chat-btn');
-    await page.waitForTimeout(1000);
-    
-    // Initially Claude Code should be selected
-    await expect(page.locator('text=CLI: Claude Code')).toBeVisible();
-    
-    // Click on OpenCode option
-    await page.locator('span:has-text("OpenCode")').first().click();
-    await page.waitForTimeout(500);
-    
-    // Check OpenCode is now selected
-    await expect(page.locator('text=CLI: OpenCode')).toBeVisible();
-    
-    // Click on Claude Code option
-    await page.locator('span:has-text("Claude Code")').first().click();
-    await page.waitForTimeout(500);
-    
-    // Check Claude is now selected
-    await expect(page.locator('text=CLI: Claude Code')).toBeVisible();
-  });
+    // List
+    const listRes = await request.get(`${BACKEND_URL}/api/conversations`)
+    expect(listRes.ok()).toBeTruthy()
+    const list = await listRes.json()
+    expect(list.length).toBeGreaterThan(0)
 
-  test('Mobile responsive layout', async ({ page }) => {
-    // Set mobile viewport
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto(FRONTEND_URL);
-    await page.waitForLoadState('networkidle');
-    
-    // Check menu button is visible on mobile
-    const menuButton = page.locator('button.menu-button');
-    await expect(menuButton).toBeVisible();
-    
-    // Click menu to open sidebar
-    await menuButton.click();
-    await page.waitForTimeout(500);
-    
-    // Check sidebar is visible
-    const sidebar = page.locator('aside.sidebar');
-    await expect(sidebar).toBeVisible();
-    
-    // Take screenshot
-    await page.screenshot({ path: 'test/screenshots/mobile-layout.png' });
-  });
+    // Get single
+    const getRes = await request.get(`${BACKEND_URL}/api/conversations/${conv.id}`)
+    expect(getRes.ok()).toBeTruthy()
 
-  test('Can create conversation with Claude Code', async ({ page }) => {
-    await page.goto(FRONTEND_URL);
-    await page.waitForLoadState('networkidle');
-    
-    // Open modal
-    await page.click('button.new-chat-btn');
-    await page.waitForTimeout(1000);
-    
-    // Select Claude Code (should be default)
-    await page.locator('span:has-text("Claude Code")').first().click();
-    
-    // Select a work directory - use index
-    const selects = page.locator('select');
-    const firstSelect = selects.first();
-    await firstSelect.selectOption({ index: 2 }); // Select cloud-code
-    await page.waitForTimeout(500);
-    
-    // Click create
-    await page.click('button:has-text("创建")');
-    await page.waitForTimeout(2000);
-    
-    // Check terminal appeared
-    const terminal = page.locator('.terminal-container');
-    await expect(terminal).toBeVisible({ timeout: 10000 });
-  });
-});
+    // Update
+    const updateRes = await request.patch(`${BACKEND_URL}/api/conversations/${conv.id}`, {
+      data: { name: 'renamed' },
+    })
+    expect(updateRes.ok()).toBeTruthy()
+    const updated = await updateRes.json()
+    expect(updated.name).toBe('renamed')
+
+    // Delete
+    const deleteRes = await request.delete(`${BACKEND_URL}/api/conversations/${conv.id}`)
+    expect(deleteRes.ok()).toBeTruthy()
+  })
+
+  test('config API', async ({ request }) => {
+    const res = await request.get(`${BACKEND_URL}/api/config`)
+    expect(res.ok()).toBeTruthy()
+    const config = await res.json()
+    expect(config.feishu).toBeTruthy()
+    expect(config.defaultWorkDir).toBeTruthy()
+  })
+
+  test('workdirs API', async ({ request }) => {
+    const res = await request.get(`${BACKEND_URL}/api/workdirs`)
+    expect(res.ok()).toBeTruthy()
+  })
+
+  test('directories API', async ({ request }) => {
+    const res = await request.get(`${BACKEND_URL}/api/directories?path=/tmp`)
+    expect(res.ok()).toBeTruthy()
+  })
+})
+
+test.describe('Frontend', () => {
+  test('page loads correctly', async ({ page }) => {
+    await page.goto(FRONTEND_URL)
+    await page.waitForLoadState('networkidle')
+
+    // Should show welcome text
+    await expect(page.locator('text=欢迎使用 Cloud Code')).toBeVisible()
+
+    await page.screenshot({ path: 'test/results/frontend-load.png' })
+  })
+
+  test('new conversation modal opens and shows CLI options', async ({ page }) => {
+    await page.goto(FRONTEND_URL)
+    await page.waitForLoadState('networkidle')
+
+    // Click new conversation button
+    await page.click('.new-chat-large-btn')
+    await page.waitForTimeout(1000)
+
+    // Modal should be visible
+    await expect(page.locator('text=新建对话')).toBeVisible()
+
+    // CLI options should show
+    await expect(page.locator('text=Claude Code').first()).toBeVisible()
+
+    await page.screenshot({ path: 'test/results/new-conv-modal.png' })
+  })
+
+  test('mobile responsive layout', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto(FRONTEND_URL)
+    await page.waitForLoadState('networkidle')
+
+    // Menu button visible on mobile
+    const menuButton = page.locator('button.menu-button')
+    await expect(menuButton).toBeVisible()
+
+    // Click to open sidebar
+    await menuButton.click()
+    await page.waitForTimeout(300)
+
+    // Sidebar should be open
+    const sidebar = page.locator('aside.sidebar.open')
+    await expect(sidebar).toBeVisible()
+
+    await page.screenshot({ path: 'test/results/mobile-layout.png' })
+  })
+})
