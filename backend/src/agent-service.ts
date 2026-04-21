@@ -106,7 +106,7 @@ export class AgentService {
     const options = {
       cwd: mergedConfig.workDir,
       env,
-      allowedTools: mergedConfig.allowedTools || ['Read', 'Edit', 'Bash', 'Glob', 'Grep'],
+      allowedTools: mergedConfig.allowedTools || ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep'],
       permissionMode: mergedConfig.permissionMode || 'acceptEdits',
       maxTurns: mergedConfig.maxTurns || 50,
       persistSession: true,
