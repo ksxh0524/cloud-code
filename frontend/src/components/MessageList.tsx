@@ -20,7 +20,6 @@ export default function MessageList({ messages, isStreaming }: MessageListProps)
         .message-list {
           display: flex; flex-direction: column; gap: 12px;
           max-width: 100%; margin: 0 auto; width: 100%;
-          padding-bottom: 80px;
         }
       `}</style>
     </div>

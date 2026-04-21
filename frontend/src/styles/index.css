@@ -9,8 +9,6 @@ html, body {
   height: 100%;
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
-  touch-action: manipulation;
 }
 
 body {
@@ -19,7 +17,6 @@ body {
   color: #111;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 #root {
@@ -28,13 +25,18 @@ body {
   overflow: hidden;
 }
 
-button, a, input, select, textarea {
+button, a, select {
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
 }
 
 button {
   cursor: pointer;
+}
+
+input, textarea, select {
+  font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 ::-webkit-scrollbar {

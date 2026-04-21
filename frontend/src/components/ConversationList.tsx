@@ -119,9 +119,10 @@ export default function ConversationList({ conversations, currentId, onSelect, o
         .conv-search-input {
           width: 100%; padding: 10px 12px;
           border: 1px solid #e5e5e5; border-radius: 10px;
-          font-size: 14px; outline: none; background: #fff;
+          font-size: 16px; outline: none; background: #fff;
           color: #111; min-height: 42px; box-sizing: border-box;
           transition: border-color 0.15s;
+          -webkit-appearance: none; appearance: none;
         }
         .conv-search-input:focus { border-color: #999; box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
         .conv-search-input::placeholder { color: #bbb; }
@@ -172,8 +173,9 @@ export default function ConversationList({ conversations, currentId, onSelect, o
         .conv-edit { display: flex; align-items: center; gap: 8px; width: 100%; }
         .conv-edit-input {
           flex: 1; padding: 8px 10px; border: 1px solid #e5e5e5;
-          border-radius: 8px; font-size: 14px; outline: none;
+          border-radius: 8px; font-size: 16px; outline: none;
           min-height: 40px; background: #fff; color: #111;
+          -webkit-appearance: none; appearance: none;
         }
         .conv-edit-input:focus { border-color: #999; }
         .conv-edit-save {

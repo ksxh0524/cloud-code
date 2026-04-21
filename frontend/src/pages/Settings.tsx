@@ -85,7 +85,7 @@ export default function Settings() {
         ) : !error ? <p>加载中...</p> : null}
       </main>
       <style>{`
-        .settings-page { min-height: 100vh; background: #fff; }
+        .settings-page { min-height: 100vh; min-height: 100dvh; background: #fff; }
         .settings-header { background: #fff; padding: 12px 16px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 12px; }
         .back-link { color: #666; text-decoration: none; font-size: 14px; display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 4px 8px; margin: -4px -8px; border-radius: 8px; transition: background 0.15s; }
         .back-link:hover { background: #f5f5f5; color: #111; }

@@ -26,8 +26,17 @@ export default function InputBox({ value, onChange, onSend, onInterrupt, isStrea
   return (
     <div className="input-box-container">
       <div className="input-box-wrapper">
-        <textarea ref={textareaRef} value={value} onChange={e => onChange(e.target.value)} placeholder={isStreaming ? '生成中...' : placeholder}
-          disabled={disabled || isStreaming} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }} className="input-textarea" rows={1} />
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={isStreaming ? '生成中...' : placeholder}
+          disabled={disabled || isStreaming}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+          className="input-textarea"
+          rows={1}
+          style={{ WebkitAppearance: 'none', appearance: 'none' }}
+        />
         {isStreaming ? (
           <button onClick={() => onInterrupt?.()} className="send-button interrupt" title="中断生成">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
@@ -40,26 +49,35 @@ export default function InputBox({ value, onChange, onSend, onInterrupt, isStrea
       </div>
       <style>{`
         .input-box-container { width: 100%; }
-        .input-box-wrapper { display: flex; gap: 8px; align-items: flex-end; background: #f7f7f8; border-radius: 14px; padding: 8px 12px; border: 1px solid #e5e5e5; }
+        .input-box-wrapper {
+          display: flex; gap: 8px; align-items: flex-end;
+          background: #f7f7f8; border-radius: 14px;
+          padding: 8px 12px; border: 1px solid #e5e5e5;
+        }
         .input-textarea {
-          flex: 1; min-height: 44px; max-height: 120px; padding: 10px 8px;
+          flex: 1; min-height: 44px; max-height: 120px;
+          padding: 10px 8px;
           font-size: 16px; font-family: inherit; color: #111;
           resize: none; overflow-y: auto; line-height: 1.5;
-          border: 0 !important; margin: 0; padding: 10px 8px;
-          background: transparent !important;
-          outline: none !important;
+          border: none; margin: 0;
+          outline: none;
+          background-color: #f7f7f8;
           -webkit-appearance: none; appearance: none;
-          box-shadow: none !important;
-          -webkit-box-shadow: none !important;
           -webkit-tap-highlight-color: transparent;
-          background-color: transparent !important;
         }
         .input-textarea::placeholder { color: #999; }
         .input-textarea:disabled { color: #999; }
-        .send-button { width: 40px; height: 40px; border-radius: 10px; border: none; background: #e5e5e5; color: #999; cursor: not-allowed; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s ease; }
+        .send-button {
+          width: 40px; height: 40px; border-radius: 10px; border: none;
+          background: #e5e5e5; color: #999; cursor: not-allowed;
+          display: flex; align-items: center; justify-content: center;
+          flex-shrink: 0; transition: all 0.2s ease;
+        }
         .send-button.active { background: #111; color: #fff; cursor: pointer; }
         .send-button.interrupt { background: #fef2f2; color: #dc2626; cursor: pointer; border: 1px solid #fecaca; }
-        @media (max-width: 768px) { .send-button { width: 44px; height: 44px; } }
+        @media (max-width: 768px) {
+          .send-button { width: 44px; height: 44px; }
+        }
       `}</style>
     </div>
   )
