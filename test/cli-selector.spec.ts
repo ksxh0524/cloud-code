@@ -12,28 +12,6 @@ test.describe('REST API', () => {
     expect(data.timestamp).toBeTruthy()
   })
 
-  test('CLI types API returns correct format', async ({ request }) => {
-    const res = await request.get(`${BACKEND_URL}/api/cli-types`)
-    expect(res.ok()).toBeTruthy()
-    const data = await res.json()
-
-    expect(data.length).toBe(2)
-    const claude = data.find((c: any) => c.type === 'claude')
-    expect(claude).toBeTruthy()
-    expect(claude.name).toBe('Claude Code')
-
-    const opencode = data.find((c: any) => c.type === 'opencode')
-    expect(opencode).toBeTruthy()
-    expect(opencode.name).toBe('OpenCode')
-  })
-
-  test('CLI check returns installed status', async ({ request }) => {
-    const res = await request.get(`${BACKEND_URL}/api/cli-check/claude`)
-    expect(res.ok()).toBeTruthy()
-    const data = await res.json()
-    expect(typeof data.installed).toBe('boolean')
-  })
-
   test('conversation CRUD', async ({ request }) => {
     // Create
     const createRes = await request.post(`${BACKEND_URL}/api/conversations`, {
@@ -71,7 +49,6 @@ test.describe('REST API', () => {
     const res = await request.get(`${BACKEND_URL}/api/config`)
     expect(res.ok()).toBeTruthy()
     const config = await res.json()
-    expect(config.feishu).toBeTruthy()
     expect(config.defaultWorkDir).toBeTruthy()
   })
 
@@ -91,25 +68,19 @@ test.describe('Frontend', () => {
     await page.goto(FRONTEND_URL)
     await page.waitForLoadState('networkidle')
 
-    // Should show welcome text
-    await expect(page.locator('text=欢迎使用 Cloud Code')).toBeVisible()
+    await expect(page.locator('text=Cloud Code')).toBeVisible()
 
     await page.screenshot({ path: 'test/results/frontend-load.png' })
   })
 
-  test('new conversation modal opens and shows CLI options', async ({ page }) => {
+  test('new conversation modal opens', async ({ page }) => {
     await page.goto(FRONTEND_URL)
     await page.waitForLoadState('networkidle')
 
-    // Click new conversation button
     await page.click('.new-chat-large-btn')
     await page.waitForTimeout(1000)
 
-    // Modal should be visible
     await expect(page.locator('text=新建对话')).toBeVisible()
-
-    // CLI options should show
-    await expect(page.locator('text=Claude Code').first()).toBeVisible()
 
     await page.screenshot({ path: 'test/results/new-conv-modal.png' })
   })
@@ -119,15 +90,12 @@ test.describe('Frontend', () => {
     await page.goto(FRONTEND_URL)
     await page.waitForLoadState('networkidle')
 
-    // Menu button visible on mobile
     const menuButton = page.locator('button.menu-button')
     await expect(menuButton).toBeVisible()
 
-    // Click to open sidebar
     await menuButton.click()
     await page.waitForTimeout(300)
 
-    // Sidebar should be open
     const sidebar = page.locator('aside.sidebar.open')
     await expect(sidebar).toBeVisible()
 

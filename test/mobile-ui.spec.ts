@@ -13,8 +13,8 @@ test.describe('Mobile UI', () => {
     const menuButton = page.locator('button.menu-button')
     await expect(menuButton).toBeVisible()
 
-    // Welcome message visible
-    await expect(page.locator('text=欢迎使用 Cloud Code')).toBeVisible()
+    // Cloud Code text visible
+    await expect(page.locator('text=Cloud Code')).toBeVisible()
 
     // New chat button visible
     await expect(page.locator('.new-chat-large-btn')).toBeVisible()

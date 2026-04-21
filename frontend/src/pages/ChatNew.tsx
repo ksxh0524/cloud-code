@@ -22,6 +22,8 @@ export default function ChatNew() {
   const [inputValue, setInputValue] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const sessionIdRef = useRef<string | null>(null)
 
   const currentConversation = conversations.find(c => c.id === conversationId)
 
@@ -38,6 +40,8 @@ export default function ChatNew() {
   }
 
   const handleIncomingMessage = useCallback((msg: any) => {
+    if (msg.sessionId && sessionIdRef.current && msg.sessionId !== sessionIdRef.current) return
+
     switch (msg.type) {
       case 'message':
         setMessages(prev => [...prev, { id: nextMsgId(), role: msg.data.role, content: msg.data.content, type: msg.data.type, timestamp: Date.now() }])
@@ -72,11 +76,13 @@ export default function ChatNew() {
     }
   }, [])
 
-  const { sendMessage, isConnected } = useAgentWebSocket({
+  const { sendMessage, isConnected, sessionId } = useAgentWebSocket({
     workDir: currentConversation?.workDir || '',
     onMessage: handleIncomingMessage,
     onError: useCallback(() => setIsStreaming(false), []),
   })
+
+  useEffect(() => { sessionIdRef.current = sessionId }, [sessionId])
 
   const handleSendMessage = () => {
     if (!inputValue.trim() || isStreaming || !currentConversation) return
@@ -118,8 +124,12 @@ export default function ChatNew() {
   }
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
+    scrollTimerRef.current = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' })
+    }, 100)
+    return () => { if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current) }
+  }, [messages, isStreaming])
 
   const handleSelectConversation = async (id: string) => {
     setConversationId(id)

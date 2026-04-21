@@ -1,3 +1,4 @@
+import React from 'react'
 import { Message } from '../types'
 import CodeBlock from './CodeBlock'
 import ReactMarkdown from 'react-markdown'
@@ -18,7 +19,7 @@ const markdownComponents: Components = {
   },
 }
 
-export default function MessageItem({ message }: MessageItemProps) {
+export default React.memo(function MessageItem({ message }: MessageItemProps) {
   const isUser = message.role === 'user'
   const isTool = message.role === 'tool'
   const isThinking = message.type === 'thinking'
@@ -82,4 +83,4 @@ export default function MessageItem({ message }: MessageItemProps) {
       `}</style>
     </div>
   )
-}
+})

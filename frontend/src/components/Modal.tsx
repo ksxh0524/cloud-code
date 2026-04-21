@@ -24,11 +24,11 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
   if (!open) return null
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        {title && <div className="modal-header">{title}</div>}
+    <div className="modal-overlay" onClick={onClose} role="presentation">
+      <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={(e) => e.stopPropagation()}>
+        {title && <div className="modal-header" id="modal-title">{title}</div>}
         <div className="modal-body">{children}</div>
-        <button className="modal-close" onClick={onClose}>✕</button>
+        <button className="modal-close" onClick={onClose} aria-label="关闭">✕</button>
       </div>
       <style>{`
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); display: flex; align-items: flex-start; justify-content: center; z-index: 9999; padding: 16px; padding-top: calc(16px + env(safe-area-inset-top)); overflow-y: auto; }

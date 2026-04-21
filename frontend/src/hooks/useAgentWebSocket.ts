@@ -23,6 +23,10 @@ export function useAgentWebSocket({
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const retryCountRef = useRef(0)
   const maxRetries = 10
+  const workDirRef = useRef(workDir)
+
+  // Keep workDir ref in sync without triggering reconnect
+  useEffect(() => { workDirRef.current = workDir }, [workDir])
 
   const onMessageRef = useRef(onMessage)
   const onErrorRef = useRef(onError)
@@ -40,18 +44,11 @@ export function useAgentWebSocket({
       setIsConnected(true)
       retryCountRef.current = 0
 
-      ws.send(
-        JSON.stringify({
-          type: 'init',
-          data: {
-            workDir,
-            env: {
-              ANTHROPIC_BASE_URL: localStorage.getItem('anthropic_base_url') || '',
-              ANTHROPIC_AUTH_TOKEN: localStorage.getItem('anthropic_auth_token') || '',
-            },
-          },
-        })
-      )
+      const apiKey = localStorage.getItem('api_key') || ''
+      ws.send(JSON.stringify({
+        type: 'init',
+        data: { workDir: workDirRef.current, apiKey },
+      }))
     }
 
     ws.onmessage = event => {
@@ -85,7 +82,7 @@ export function useAgentWebSocket({
         }, delay)
       }
     }
-  }, [workDir])
+  }, []) // No workDir dependency — avoid reconnect on conversation switch
 
   const sendMessage = useCallback(
     (message: any) => {

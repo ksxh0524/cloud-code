@@ -3,6 +3,7 @@
 ## 环境要求
 
 - Node.js 18+
+- pnpm
 - 现代浏览器 (Chrome, Firefox, Safari, Edge)
 
 ---
@@ -14,12 +15,7 @@
 ```bash
 git clone <repository-url>
 cd cloud-code
-
-# 前端依赖
 pnpm install
-
-# 后端依赖
-cd backend && pnpm install
 ```
 
 ### 2. 配置环境变量
@@ -32,23 +28,16 @@ cp .env.example .env
 
 ### 3. 启动服务
 
-**终端 1 - 后端:**
-
 ```bash
-cd backend && pnpm dev
-```
-
-**终端 2 - 前端:**
-
-```bash
-pnpm dev
+# 同时启动前后端
+pnpm dev:all
 ```
 
 ### 4. 访问应用
 
 - 前端: http://localhost:18766
 - 后端 API: http://localhost:18765/api/health
-- WebSocket: ws://localhost:18765
+- WebSocket: ws://localhost:18765/ws
 
 ---
 
@@ -57,11 +46,8 @@ pnpm dev
 ### 方式一: 直接部署
 
 ```bash
-# 构建前端
+# 构建前端和后端
 pnpm build
-
-# 构建后端
-cd backend && pnpm build
 
 # 启动后端
 cd backend && node dist/server.js
@@ -77,9 +63,9 @@ After=network.target
 [Service]
 Type=simple
 User=your-user
-WorkingDirectory=/path/to/cloud-code/backend
+WorkingDirectory=/path/to/cloud-code
 EnvironmentFile=/path/to/cloud-code/backend/.env
-ExecStart=/usr/bin/node dist/server.js
+ExecStart=/usr/bin/node backend/dist/server.js
 Restart=always
 RestartSec=3
 
@@ -89,24 +75,17 @@ WantedBy=multi-user.target
 
 ### 方式二: Docker 部署
 
-```dockerfile
-FROM node:20-slim
+```bash
+# 构建镜像
+docker build -t cloud-code .
 
-WORKDIR /app
-
-# 后端
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --production
-COPY backend/tsconfig.json .
-COPY backend/src ./src
-RUN npm run build
-
-# 前端
-COPY frontend/dist ./public
-
-EXPOSE 18765
-
-CMD ["node", "dist/server.js"]
+# 运行容器
+docker run -d \
+  --name cloud-code \
+  -p 18765:18765 \
+  -e ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic \
+  -e ANTHROPIC_AUTH_TOKEN=your-api-key \
+  cloud-code
 ```
 
 ---
@@ -120,10 +99,8 @@ server {
     listen 80;
     server_name your-domain.com;
 
-    location / {
-        root /path/to/cloud-code/frontend/dist;
-        try_files $uri $uri/ /index.html;
-    }
+    root /path/to/cloud-code/frontend/dist;
+    try_files $uri $uri/ /index.html;
 
     location /api {
         proxy_pass http://127.0.0.1:18765;
@@ -131,7 +108,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
     }
 
-    location / {
+    location /ws {
         proxy_pass http://127.0.0.1:18765;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -153,7 +130,7 @@ your-domain.com {
         reverse_proxy localhost:18765
     }
 
-    handle {
+    handle /ws {
         reverse_proxy localhost:18765
     }
 }
@@ -168,17 +145,24 @@ your-domain.com {
 | `PORT` | 后端端口 | 18765 |
 | `ANTHROPIC_BASE_URL` | API 基础 URL | - |
 | `ANTHROPIC_AUTH_TOKEN` | API 认证密钥 | - |
+| `API_KEY` | API 访问密钥（可选，设置后所有请求需要认证） | - |
+| `ALLOWED_ORIGINS` | CORS 允许来源（逗号分隔，默认允许所有） | - |
+| `LOG_LEVEL` | 日志级别 | info |
+| `NODE_ENV` | 运行环境 | development |
 
 ---
 
 ## 数据存储
 
-应用数据存储在 `~/.cloud-code/data.json`，包含会话列表和配置信息。
+应用数据存储在 `~/.cloud-code/` 目录：
+- `data.json` — 会话列表和配置
+- `messages/` — 每个会话的消息历史
 
 备份:
 
 ```bash
 cp ~/.cloud-code/data.json ~/cloud-code-backup-$(date +%Y%m%d).json
+cp -r ~/.cloud-code/messages ~/cloud-code-messages-backup-$(date +%Y%m%d)
 ```
 
 ---
@@ -186,5 +170,6 @@ cp ~/.cloud-code/data.json ~/cloud-code-backup-$(date +%Y%m%d).json
 ## 安全建议
 
 1. **使用 HTTPS**: 生产环境必须启用
-2. **限制访问**: 使用防火墙限制来源
-3. **保护 API Key**: 不要将 `.env` 文件提交到版本控制
+2. **设置 API_KEY**: 防止未授权访问
+3. **限制 ALLOWED_ORIGINS**: 只允许可信来源
+4. **保护 .env 文件**: 不要提交到版本控制

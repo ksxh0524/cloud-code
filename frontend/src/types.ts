@@ -21,13 +21,6 @@ export interface Message {
   timestamp?: number
 }
 
-export interface ToolCall {
-  name: string
-  input?: Record<string, unknown>
-  output?: Record<string, unknown>
-  status: 'running' | 'completed' | 'error'
-}
-
 export interface AppConfig {
   defaultWorkDir: string
 }
