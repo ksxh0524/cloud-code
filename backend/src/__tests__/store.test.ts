@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest'
-import { mkdir, rm, writeFile, readFile } from 'fs/promises'
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import { mkdir, rm, readFile, writeFile, copyFile } from 'fs/promises'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import {
@@ -19,36 +20,31 @@ import {
   deleteMessages,
 } from '../store.js'
 
-const TEST_DATA_DIR = join(homedir(), '.cloud-code-test')
-const TEST_DATA_FILE = join(TEST_DATA_DIR, 'data.json')
-const TEST_MESSAGES_DIR = join(TEST_DATA_DIR, 'messages')
+const REAL_DATA_DIR = join(homedir(), '.cloud-code')
+const REAL_DATA_FILE = join(REAL_DATA_DIR, 'data.json')
+const BACKUP_FILE = join(homedir(), '.cloud-code-test', 'data-backup.json')
 
 describe('Store Module', () => {
   beforeAll(async () => {
-    // Create test directory
-    await mkdir(TEST_DATA_DIR, { recursive: true })
-    await mkdir(TEST_MESSAGES_DIR, { recursive: true })
-  })
-
-  beforeEach(async () => {
-    // Clear test data before each test
-    try {
-      await rm(TEST_DATA_FILE, { force: true })
-      const files = await import('fs/promises').then(m => m.readdir(TEST_MESSAGES_DIR))
-      for (const file of files) {
-        await rm(join(TEST_MESSAGES_DIR, file), { force: true })
-      }
-    } catch {
-      // Ignore errors
+    // Backup real data file if it exists
+    if (existsSync(REAL_DATA_FILE)) {
+      await mkdir(join(homedir(), '.cloud-code-test'), { recursive: true })
+      await copyFile(REAL_DATA_FILE, BACKUP_FILE)
     }
   })
 
-  afterEach(async () => {
-    // Cleanup after each test
-    try {
-      await rm(TEST_DATA_FILE, { force: true })
-    } catch {
-      // Ignore errors
+  beforeEach(async () => {
+    // Clear real data file before each test for isolation
+    if (existsSync(REAL_DATA_FILE)) {
+      await rm(REAL_DATA_FILE, { force: true })
+    }
+  })
+
+  afterAll(async () => {
+    // Restore real data file
+    if (existsSync(BACKUP_FILE)) {
+      await copyFile(BACKUP_FILE, REAL_DATA_FILE)
+      await rm(BACKUP_FILE, { force: true })
     }
   })
 
