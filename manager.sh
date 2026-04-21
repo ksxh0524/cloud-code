@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Cloud Code 管理脚本
-# 用法: ./manager.sh [start|stop|status|restart|logs|update|clean]
+# 用法: ./manager.sh [start|stop|status|restart|logs|update|clean|build]
+#   --prod  生产模式 (需要先 build)
 
 set -euo pipefail
 
@@ -16,6 +17,7 @@ readonly PID_DIR="$SCRIPT_DIR/.pids"
 readonly MAX_START_WAIT=30
 readonly MAX_STOP_WAIT=8
 readonly LOG_RETENTION_DAYS=7
+readonly LOG_MAX_SIZE=$((5 * 1024 * 1024))  # 5MB
 
 # 颜色
 readonly RED='\033[0;31m'
@@ -25,10 +27,18 @@ readonly BLUE='\033[0;34m'
 readonly CYAN='\033[0;36m'
 readonly NC='\033[0m'
 
-# 服务配置: name|port|display_name|workdir|start_cmd|health_path
+# 解析 --prod 标志
+PROD_MODE=false
+for arg in "$@"; do
+    case "$arg" in
+        --prod) PROD_MODE=true ;;
+    esac
+done
+
+# 服务配置: name|port|display_name|workdir|dev_cmd|prod_cmd|health_path
 readonly SERVICES=(
-    "backend|18765|Backend API|backend|pnpm run dev|/api/health"
-    "frontend|18766|Frontend|frontend|pnpm run dev|/"
+    "backend|18765|Backend API|backend|pnpm run dev|node dist/server.js|/api/health"
+    "frontend|18766|Frontend|frontend|pnpm run dev|npx vite preview --port 18766|/"
 )
 
 # ============================================================================
@@ -57,8 +67,9 @@ get_service_field() {
         port)   idx=1 ;;
         display) idx=2 ;;
         workdir) idx=3 ;;
-        cmd)    idx=4 ;;
-        health) idx=5 ;;
+        dev_cmd) idx=4 ;;
+        prod_cmd) idx=5 ;;
+        health) idx=6 ;;
         *)      return 1 ;;
     esac
     for svc in "${SERVICES[@]}"; do
@@ -81,14 +92,60 @@ get_pids_by_port() {
     fi
 }
 
-get_descendants() {
-    local pid=$1
-    local children
-    children=$(pgrep -P "$pid" 2>/dev/null || true)
-    for child in $children; do
-        echo "$child"
-        get_descendants "$child"
-    done
+# 检查端口是否被非本项目的进程占用
+check_port_conflict() {
+    local port=$1
+    local service=$2
+    local pids
+    pids=$(get_pids_by_port "$port")
+
+    if [ -z "$pids" ]; then
+        return 0  # 端口空闲
+    fi
+
+    # 检查这些 PID 是否属于本脚本管理的服务
+    local pid_file="$PID_DIR/${service}.pid"
+    if [ -f "$pid_file" ]; then
+        local managed_pid
+        managed_pid=$(cat "$pid_file")
+        for pid in $pids; do
+            if [ "$pid" = "$managed_pid" ]; then
+                return 0  # 是自己管理的进程
+            fi
+        done
+    fi
+
+    # 端口被其他进程占用
+    return 1
+}
+
+# 截断超大日志文件
+rotate_log_if_needed() {
+    local log_file=$1
+    [ ! -f "$log_file" ] && return
+
+    local size
+    size=$(stat -f%z "$log_file" 2>/dev/null || stat -c%s "$log_file" 2>/dev/null || echo 0)
+    if [ "$size" -gt "$LOG_MAX_SIZE" ]; then
+        local backup="${log_file}.old"
+        mv "$log_file" "$backup"
+        # 只保留最后 200 行到新日志
+        tail -200 "$backup" > "$log_file"
+        log_info "日志已轮转: $(basename "$log_file")"
+    fi
+}
+
+# 交互式确认
+confirm() {
+    local prompt=$1
+    local default=${2:-n}
+    echo -ne "${YELLOW}  $prompt [${default^^}] ${NC}"
+    read -r answer
+    answer="${answer:-$default}"
+    case "$answer" in
+        [yY]|[yY][eE][sS]) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # ============================================================================
@@ -99,26 +156,11 @@ is_service_running() {
     local service=$1
     local port
     port=$(get_service_field "$service" port) || return 1
-    local pid_file="$PID_DIR/${service}.pid"
 
-    if [ -f "$pid_file" ]; then
-        local pid
-        pid=$(cat "$pid_file")
-        if kill -0 "$pid" 2>/dev/null; then
-            return 0
-        fi
-        local descendants
-        descendants=$(get_descendants "$pid")
-        for dpid in $descendants; do
-            if kill -0 "$dpid" 2>/dev/null; then
-                return 0
-            fi
-        done
-    fi
-
-    local http_code
-    http_code=$(curl -s -o /dev/null -w "%{http_code}" -m 2 "http://localhost:$port" 2>/dev/null || echo "000")
-    if [[ "$http_code" =~ ^[23] ]]; then
+    # 先检查端口是否有进程在监听
+    local pids
+    pids=$(get_pids_by_port "$port")
+    if [ -n "$pids" ]; then
         return 0
     fi
 
@@ -144,7 +186,7 @@ wait_for_health() {
             if [ "$service" = "backend" ]; then
                 local body
                 body=$(curl -s -m 2 "http://localhost:${port}${health_path}" 2>/dev/null || echo "")
-                if echo "$body" | grep -qiE "ok|healthy|success"; then
+                if echo "$body" | grep -qiE '"status"\s*:\s*"ok"'; then
                     return 0
                 fi
             else
@@ -164,11 +206,17 @@ wait_for_health() {
 
 start_service() {
     local service=$1
-    local port name workdir cmd
+    local port name workdir health_path cmd
     port=$(get_service_field "$service" port) || return 1
     name=$(get_service_field "$service" display) || return 1
     workdir=$(get_service_field "$service" workdir) || return 1
-    cmd=$(get_service_field "$service" cmd) || return 1
+    health_path=$(get_service_field "$service" health) || health_path="/"
+
+    if [ "$PROD_MODE" = true ]; then
+        cmd=$(get_service_field "$service" prod_cmd) || return 1
+    else
+        cmd=$(get_service_field "$service" dev_cmd) || return 1
+    fi
 
     local pid_file="$PID_DIR/${service}.pid"
     local log_file="$LOG_DIR/${service}.log"
@@ -178,7 +226,35 @@ start_service() {
         return 0
     fi
 
-    log_info "启动 $name..."
+    # 检查端口冲突
+    if ! check_port_conflict "$port" "$service"; then
+        log_error "$name: 端口 $port 已被其他进程占用"
+        local occupier
+        occupier=$(lsof -i :"$port" -sTCP:LISTEN 2>/dev/null | tail -1 || true)
+        [ -n "$occupier" ] && log_warning "占用进程: $occupier"
+        return 1
+    fi
+
+    # 后端依赖检查（前端启动前确保后端就绪）
+    if [ "$service" = "frontend" ]; then
+        local backend_port
+        backend_port=$(get_service_field "backend" port) || backend_port=18765
+        if ! is_service_running "backend"; then
+            log_warning "后端未运行，建议先启动后端"
+        fi
+    fi
+
+    # 生产模式检查编译产物
+    if [ "$PROD_MODE" = true ]; then
+        if [ "$service" = "backend" ] && [ ! -d "$SCRIPT_DIR/backend/dist" ]; then
+            log_error "$name: 未找到 dist/ 目录，请先运行 ./manager.sh build"
+            return 1
+        fi
+        if [ "$service" = "frontend" ] && [ ! -d "$SCRIPT_DIR/frontend/dist" ]; then
+            log_error "$name: 未找到 dist/ 目录，请先运行 ./manager.sh build"
+            return 1
+        fi
+    fi
 
     if [ "$service" = "backend" ] && [ ! -f "$SCRIPT_DIR/backend/.env" ]; then
         log_error "Backend .env 文件不存在"
@@ -186,7 +262,27 @@ start_service() {
         return 1
     fi
 
-    ( cd "$SCRIPT_DIR/$workdir" && nohup $cmd > "$log_file" 2>&1 & echo $! ) > "$pid_file"
+    log_info "启动 $name..."
+
+    # 轮转日志
+    rotate_log_if_needed "$log_file"
+
+    # 启动服务，通过等待端口出现来获取真实 PID
+    ( cd "$SCRIPT_DIR/$workdir" && nohup $cmd >> "$log_file" 2>&1 & )
+
+    # 等待进程启动并获取端口对应的 PID
+    local wait_count=0
+    local actual_pid=""
+    while [ $wait_count -lt 5 ]; do
+        actual_pid=$(get_pids_by_port "$port" | head -1)
+        [ -n "$actual_pid" ] && break
+        sleep 0.5
+        wait_count=$((wait_count + 1))
+    done
+
+    if [ -n "$actual_pid" ]; then
+        echo "$actual_pid" > "$pid_file"
+    fi
 
     if wait_for_health "$service"; then
         log_success "$name 启动成功 (端口 $port)"
@@ -213,42 +309,17 @@ stop_service() {
 
     log_warning "停止 $name..."
 
+    # 收集所有相关 PID
     local all_pids=""
-
-    if [ -f "$pid_file" ]; then
-        local file_pid
-        file_pid=$(cat "$pid_file")
-        if kill -0 "$file_pid" 2>/dev/null; then
-            all_pids="$file_pid"
-        fi
-        local descendants
-        descendants=$(get_descendants "$file_pid")
-        for dpid in $descendants; do
-            if kill -0 "$dpid" 2>/dev/null; then
-                all_pids="$all_pids $dpid"
-            fi
-        done
-    fi
-
-    local port_pids
-    port_pids=$(get_pids_by_port "$port")
-    for ppid in $port_pids; do
-        if kill -0 "$ppid" 2>/dev/null; then
-            all_pids="$all_pids $ppid"
-        fi
-    done
-
-    all_pids=$(echo "$all_pids" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
+    all_pids=$(get_pids_by_port "$port")
 
     if [ -z "$all_pids" ]; then
-        port_pids=$(get_pids_by_port "$port")
-        if [ -z "$port_pids" ]; then
-            log_success "$name 已停止"
-            rm -f "$pid_file" 2>/dev/null || true
-            return 0
-        fi
-        all_pids="$port_pids"
+        log_success "$name 已停止"
+        rm -f "$pid_file" 2>/dev/null || true
+        return 0
     fi
+
+    all_pids=$(echo "$all_pids" | sort -u)
 
     log_info "发送 SIGTERM 到进程: $(echo $all_pids | tr '\n' ' ')"
     echo "$all_pids" | xargs kill -TERM 2>/dev/null || true
@@ -273,24 +344,14 @@ stop_service() {
 
     log_warning "优雅退出超时，强制停止 $name..."
 
-    local kill_pids=""
-    for pid in $all_pids; do
-        if kill -0 "$pid" 2>/dev/null; then
-            kill_pids="$kill_pids $pid"
-        fi
-    done
-    local leftover
-    leftover=$(get_pids_by_port "$port")
-    [ -n "$leftover" ] && kill_pids="$kill_pids $leftover"
-
-    kill_pids=$(echo "$kill_pids" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
-
-    if [ -n "$kill_pids" ]; then
-        echo "$kill_pids" | xargs kill -9 2>/dev/null || true
+    # SIGKILL 兜底
+    all_pids=$(get_pids_by_port "$port")
+    if [ -n "$all_pids" ]; then
+        echo "$all_pids" | xargs kill -9 2>/dev/null || true
         sleep 1
-        leftover=$(get_pids_by_port "$port")
-        if [ -n "$leftover" ]; then
-            echo "$leftover" | xargs kill -9 2>/dev/null || true
+        all_pids=$(get_pids_by_port "$port")
+        if [ -n "$all_pids" ]; then
+            echo "$all_pids" | xargs kill -9 2>/dev/null || true
         fi
     fi
 
@@ -304,8 +365,11 @@ stop_service() {
 # ============================================================================
 
 start_services() {
+    local mode_label=""
+    [ "$PROD_MODE" = true ] && mode_label=" [生产模式]"
+
     echo -e "${BLUE}╔══════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║       Cloud Code 启动中...               ║${NC}"
+    echo -e "${BLUE}║       Cloud Code 启动中...${mode_label}            ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -330,7 +394,7 @@ start_services() {
 
     echo ""
     echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║       所有服务已启动                     ║${NC}"
+    echo -e "${GREEN}║       所有服务已启动${mode_label}                 ║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "  ${BLUE}Backend:${NC}    http://localhost:18765"
@@ -376,8 +440,7 @@ show_status() {
 
         if is_service_running "$name"; then
             local pid=""
-            [ -f "$pid_file" ] && pid=$(cat "$pid_file")
-            [ -z "$pid" ] && pid=$(get_pids_by_port "$port" | head -1)
+            pid=$(get_pids_by_port "$port" | head -1)
 
             local uptime=""
             if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
@@ -447,11 +510,57 @@ show_logs() {
     tail -f "$log_file"
 }
 
+do_build() {
+    echo -e "${BLUE}╔══════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║       Cloud Code 构建中...               ║${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════╝${NC}"
+    echo ""
+
+    if ! has_command pnpm; then
+        log_error "未找到 pnpm"
+        exit 1
+    fi
+
+    if [ ! -d "$SCRIPT_DIR/node_modules" ]; then
+        log_warning "安装依赖..."
+        pnpm install
+    fi
+
+    log_info "构建后端..."
+    (cd "$SCRIPT_DIR/backend" && pnpm run build)
+    log_success "后端构建完成"
+
+    log_info "构建前端..."
+    (cd "$SCRIPT_DIR/frontend" && pnpm run build)
+    log_success "前端构建完成"
+
+    echo ""
+    log_success "构建完成！使用 ${CYAN}./manager.sh start --prod${NC} 以生产模式启动"
+}
+
 do_update() {
     echo -e "${BLUE}╔══════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║       Cloud Code 更新中...               ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════╝${NC}"
     echo ""
+
+    local was_running=false
+    for svc in "${SERVICES[@]}"; do
+        local name
+        name=$(echo "$svc" | cut -d'|' -f1)
+        if is_service_running "$name"; then
+            was_running=true
+            break
+        fi
+    done
+
+    if [ "$was_running" = true ]; then
+        log_warning "检测到服务正在运行"
+        if confirm "是否先停止服务？(推荐)" "y"; then
+            stop_services
+            echo ""
+        fi
+    fi
 
     log_info "拉取最新代码..."
     if git pull; then
@@ -462,7 +571,7 @@ do_update() {
     fi
 
     log_info "安装依赖..."
-    for dir in "." "backend"; do
+    for dir in "." "backend" "frontend"; do
         if [ -f "$SCRIPT_DIR/$dir/package.json" ]; then
             log_info "安装 $dir 依赖..."
             (cd "$SCRIPT_DIR/$dir" && pnpm install)
@@ -473,15 +582,12 @@ do_update() {
     echo ""
     log_success "更新完成！"
 
-    for svc in "${SERVICES[@]}"; do
-        local name
-        name=$(echo "$svc" | cut -d'|' -f1)
-        if is_service_running "$name"; then
-            log_warning "检测到有服务正在运行，建议重启以应用更新"
-            echo -e "运行 ${CYAN}./manager.sh restart${NC} 重启所有服务"
-            break
+    if [ "$was_running" = true ]; then
+        if confirm "是否立即重启服务？" "y"; then
+            echo ""
+            start_services
         fi
-    done
+    fi
 }
 
 do_clean() {
@@ -494,14 +600,18 @@ do_clean() {
 
     local count
     count=$(find "$LOG_DIR" -name "*.log" -type f -mtime +$LOG_RETENTION_DAYS 2>/dev/null | wc -l | tr -d ' ')
+    local old_count
+    old_count=$(find "$LOG_DIR" -name "*.log.old" -type f 2>/dev/null | wc -l | tr -d ' ')
 
-    if [ "$count" -eq 0 ]; then
+    if [ "$count" -eq 0 ] && [ "$old_count" -eq 0 ]; then
         log_success "没有需要清理的旧日志"
         return
     fi
 
-    find "$LOG_DIR" -name "*.log" -type f -mtime +$LOG_RETENTION_DAYS -exec rm -v {} \;
-    log_success "已清理 $count 个旧日志文件"
+    [ "$count" -gt 0 ] && find "$LOG_DIR" -name "*.log" -type f -mtime +$LOG_RETENTION_DAYS -exec rm -v {} \;
+    [ "$old_count" -gt 0 ] && find "$LOG_DIR" -name "*.log.old" -type f -exec rm -v {} \;
+
+    log_success "已清理 $count 个旧日志文件和 $old_count 个轮转备份"
 }
 
 show_help() {
@@ -511,16 +621,21 @@ Cloud Code 管理脚本
 用法: $0 <command> [options]
 
 命令:
-  start     启动所有服务
+  start     启动所有服务 (开发模式)
+  start --prod  生产模式启动 (需要先 build)
   stop      停止所有服务
   restart   重启所有服务
+  build     构建生产版本
   status    查看服务状态
   logs      查看日志 (可选: logs <service>)
-  update    拉取代码并安装依赖
+  update    拉取代码并安装依赖 (自动提示重启)
   clean     清理 $LOG_RETENTION_DAYS 天前的旧日志
 
 示例:
-  $0 start              # 启动所有服务
+  $0 start              # 启动所有服务 (开发模式)
+  $0 start --prod       # 生产模式启动
+  $0 build              # 构建
+  $0 build && $0 start --prod  # 构建+生产启动
   $0 logs backend       # 查看后端日志
   $0 logs               # 实时查看所有日志
   $0 update             # 更新代码+依赖
@@ -543,12 +658,18 @@ case "${1:-}" in
         sleep 2
         start_services
         ;;
+    build)   do_build ;;
     status)  show_status ;;
     logs)    show_logs "$@" ;;
     update)  do_update ;;
     clean)   do_clean ;;
     -h|--help|help) show_help ;;
+    "")
+        show_help
+        exit 1
+        ;;
     *)
+        log_error "未知命令: $1"
         show_help
         exit 1
         ;;

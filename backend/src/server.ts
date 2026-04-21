@@ -186,7 +186,7 @@ wss.on('connection', (ws: WebSocket) => {
           const { workDir } = message.data || {}
 
           const config: AgentConfig = {
-            workDir,
+            workDir: workDir ?? '',
             env: {
               ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || '',
               ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || '',
