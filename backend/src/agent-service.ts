@@ -125,19 +125,18 @@ export class AgentService {
       this.sessions.set(sessionId, { query: queryIterator, config: mergedConfig })
 
       for await (const message of queryIterator) {
-        const wsMsg = this.convertToWebSocketMessage(message, sessionId)
-        if (!wsMsg) continue
-
-        if (wsMsg.type === 'tool_call') {
-          const toolId = `tool-${++toolIdCounter}`
-          ;(wsMsg.data as Record<string, unknown>).toolId = toolId
-          pendingToolIds.push(toolId)
-        } else if (wsMsg.type === 'tool_result') {
-          const toolId = pendingToolIds.shift()
-          if (toolId) (wsMsg.data as Record<string, unknown>).toolId = toolId
+        const wsMsgs = this.convertToWebSocketMessages(message, sessionId)
+        for (const wsMsg of wsMsgs) {
+          if (wsMsg.type === 'tool_call') {
+            const toolId = `tool-${++toolIdCounter}`
+            ;(wsMsg.data as Record<string, unknown>).toolId = toolId
+            pendingToolIds.push(toolId)
+          } else if (wsMsg.type === 'tool_result') {
+            const toolId = pendingToolIds.shift()
+            if (toolId) (wsMsg.data as Record<string, unknown>).toolId = toolId
+          }
+          onMessage(wsMsg)
         }
-
-        onMessage(wsMsg)
       }
 
       onMessage({ type: 'done', data: null, sessionId })
@@ -153,7 +152,7 @@ export class AgentService {
   }
 
   /**
-   * 将 SDK 消息转换为 WebSocket 消息格式
+   * 将 SDK 消息转换为 WebSocket 消息数组
    *
    * SDK 消息格式（不含 includePartialMessages）:
    * - system: init 元数据 → 忽略
@@ -161,52 +160,67 @@ export class AgentService {
    * - user: message.content[] 包含 tool_result blocks（多轮时自动注入）
    * - result: 最终结果 → 忽略（我们自己发 done）
    */
-  private convertToWebSocketMessage(message: SDKMessage, sessionId: string): WebSocketMessage | null {
+  private convertToWebSocketMessages(message: SDKMessage, sessionId: string): WebSocketMessage[] {
     const raw = message as Record<string, unknown>
     const msgType = raw.type as string
 
-    // System init → skip
-    if (msgType === 'system') return null
+    if (msgType === 'system' || msgType === 'result') return []
 
-    // Result → skip (we send our own 'done')
-    if (msgType === 'result') return null
-
-    // Assistant message → extract content blocks
+    // Assistant message → extract ALL content blocks
     if (msgType === 'assistant') {
       const inner = raw.message as Record<string, unknown> | undefined
-      if (!inner) return null
+      if (!inner) return []
       const blocks = inner.content as Record<string, unknown>[] | undefined
-      if (!Array.isArray(blocks) || blocks.length === 0) return null
+      if (!Array.isArray(blocks)) return []
 
-      // Send each content block as a separate WS message
+      const results: WebSocketMessage[] = []
       for (const block of blocks) {
         const bType = block.type as string
         if (bType === 'thinking') {
-          return {
+          results.push({
             type: 'thinking',
             data: { content: String(block.thinking || '') },
             sessionId,
-          }
-        }
-        if (bType === 'tool_use') {
-          return {
+          })
+        } else if (bType === 'tool_use') {
+          results.push({
             type: 'tool_call',
             data: { toolName: block.name, toolInput: block.input },
             sessionId,
-          }
-        }
-        if (bType === 'text') {
-          return {
+          })
+        } else if (bType === 'text') {
+          results.push({
             type: 'message',
             data: { role: 'assistant', content: String(block.text || ''), type: 'text' },
             sessionId,
-          }
+          })
         }
       }
-      return null
+      return results
     }
 
-    return null
+    // User message (tool results from multi-turn)
+    if (msgType === 'user') {
+      const inner = raw.message as Record<string, unknown> | undefined
+      if (!inner) return []
+      const blocks = inner.content as Record<string, unknown>[] | undefined
+      if (!Array.isArray(blocks)) return []
+
+      const results: WebSocketMessage[] = []
+      for (const block of blocks) {
+        if (block.type === 'tool_result') {
+          const toolOutput = typeof block.content === 'string' ? block.content : JSON.stringify(block.content)
+          results.push({
+            type: 'tool_result',
+            data: { toolName: '', toolOutput },
+            sessionId,
+          })
+        }
+      }
+      return results
+    }
+
+    return []
   }
 
   /**
