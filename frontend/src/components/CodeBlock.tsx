@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { logger } from '../lib/logger'
 
 interface CodeBlockProps {
   code: string
@@ -15,6 +16,7 @@ export default function CodeBlock({ code, language = 'text' }: CodeBlockProps) {
       await navigator.clipboard.writeText(code)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+      logger.userAction('copy_code', { language, codeLength: code.length })
     } catch {
       const textarea = document.createElement('textarea')
       textarea.value = code
