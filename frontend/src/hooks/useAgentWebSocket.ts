@@ -22,6 +22,7 @@ export function useAgentWebSocket({
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const retryCountRef = useRef(0)
+  const activeRef = useRef(true)
   const maxRetries = 10
   const workDirRef = useRef(workDir)
 
@@ -34,6 +35,14 @@ export function useAgentWebSocket({
   useEffect(() => { onErrorRef.current = onError }, [onError])
 
   const connect = useCallback(() => {
+    // Close any stale connection first (prevents orphaned connections from StrictMode)
+    if (wsRef.current) {
+      const old = wsRef.current
+      old.onclose = null
+      old.close()
+      wsRef.current = null
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/ws`
 
@@ -70,9 +79,11 @@ export function useAgentWebSocket({
 
     ws.onclose = () => {
       setIsConnected(false)
-      wsRef.current = null
-
-      if (retryCountRef.current < maxRetries) {
+      if (wsRef.current === ws) {
+        wsRef.current = null
+      }
+      // Only reconnect if component is still active
+      if (activeRef.current && retryCountRef.current < maxRetries) {
         const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000)
         retryCountRef.current++
         reconnectTimeoutRef.current = setTimeout(() => {
@@ -81,7 +92,7 @@ export function useAgentWebSocket({
         }, delay)
       }
     }
-  }, []) // No workDir dependency — avoid reconnect on conversation switch
+  }, [])
 
   const sendMessage = useCallback(
     (message: any) => {
@@ -95,14 +106,20 @@ export function useAgentWebSocket({
   )
 
   useEffect(() => {
+    activeRef.current = true
     connect()
 
     return () => {
+      activeRef.current = false
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = undefined
       }
       if (wsRef.current) {
-        wsRef.current.close()
+        const ws = wsRef.current
+        ws.onclose = null // Prevent reconnect after intentional close
+        ws.close()
+        wsRef.current = null
       }
     }
   }, [connect])

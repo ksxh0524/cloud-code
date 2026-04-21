@@ -110,7 +110,6 @@ export class AgentService {
       permissionMode: mergedConfig.permissionMode || 'acceptEdits',
       maxTurns: mergedConfig.maxTurns || 50,
       persistSession: true,
-      includePartialMessages: true,
     }
 
     let toolIdCounter = 0
@@ -127,6 +126,7 @@ export class AgentService {
 
       for await (const message of queryIterator) {
         const wsMsg = this.convertToWebSocketMessage(message, sessionId)
+        if (!wsMsg) continue
 
         if (wsMsg.type === 'tool_call') {
           const toolId = `tool-${++toolIdCounter}`
@@ -155,81 +155,58 @@ export class AgentService {
   /**
    * 将 SDK 消息转换为 WebSocket 消息格式
    *
-   * @private
-   * @param message - SDK 原始消息
-   * @param sessionId - 会话 ID
-   * @returns WebSocketMessage - 转换后的消息
+   * SDK 消息格式（不含 includePartialMessages）:
+   * - system: init 元数据 → 忽略
+   * - assistant: message.content[] 包含 text/thinking/tool_use blocks
+   * - user: message.content[] 包含 tool_result blocks（多轮时自动注入）
+   * - result: 最终结果 → 忽略（我们自己发 done）
    */
-  private convertToWebSocketMessage(message: SDKMessage, sessionId: string): WebSocketMessage {
-    const msgType = message.type as string
+  private convertToWebSocketMessage(message: SDKMessage, sessionId: string): WebSocketMessage | null {
     const raw = message as Record<string, unknown>
+    const msgType = raw.type as string
 
-    switch (msgType) {
-      case 'assistant':
-        return {
-          type: 'message',
-          data: { role: 'assistant', content: this.extractContent(message), type: 'text' },
-          sessionId,
+    // System init → skip
+    if (msgType === 'system') return null
+
+    // Result → skip (we send our own 'done')
+    if (msgType === 'result') return null
+
+    // Assistant message → extract content blocks
+    if (msgType === 'assistant') {
+      const inner = raw.message as Record<string, unknown> | undefined
+      if (!inner) return null
+      const blocks = inner.content as Record<string, unknown>[] | undefined
+      if (!Array.isArray(blocks) || blocks.length === 0) return null
+
+      // Send each content block as a separate WS message
+      for (const block of blocks) {
+        const bType = block.type as string
+        if (bType === 'thinking') {
+          return {
+            type: 'thinking',
+            data: { content: String(block.thinking || '') },
+            sessionId,
+          }
         }
-
-      case 'tool_use':
-        return {
-          type: 'tool_call',
-          data: { toolName: raw.tool_name, toolInput: raw.tool_input },
-          sessionId,
+        if (bType === 'tool_use') {
+          return {
+            type: 'tool_call',
+            data: { toolName: block.name, toolInput: block.input },
+            sessionId,
+          }
         }
-
-      case 'tool_result':
-        return {
-          type: 'tool_result',
-          data: { toolName: raw.tool_name, toolOutput: raw.tool_output },
-          sessionId,
-        }
-
-      case 'stream_event': {
-        const delta = (raw.event as Record<string, unknown>)?.delta
-        const text = typeof delta === 'string' ? delta : (delta as Record<string, unknown>)?.text || ''
-        return {
-          type: 'stream',
-          data: { delta: { text: String(text) } },
-          sessionId,
+        if (bType === 'text') {
+          return {
+            type: 'message',
+            data: { role: 'assistant', content: String(block.text || ''), type: 'text' },
+            sessionId,
+          }
         }
       }
-
-      case 'thinking':
-        return {
-          type: 'thinking',
-          data: { content: String(raw.content || '') },
-          sessionId,
-        }
-
-      default:
-        return {
-          type: 'message',
-          data: { role: 'system', content: JSON.stringify(message), type: 'text' },
-          sessionId,
-        }
+      return null
     }
-  }
 
-  /**
-   * 从 SDK 消息中提取文本内容
-   *
-   * @private
-   * @param message - SDK 消息
-   * @returns string - 提取的文本内容
-   */
-  private extractContent(message: SDKMessage): string {
-    const raw = message as Record<string, unknown>
-    const content = raw.content
-    if (typeof content === 'string') return content
-    if (Array.isArray(content)) {
-      return content
-        .filter((block: Record<string, unknown>) => block.type === 'text')
-        .map((block: Record<string, unknown>) => block.text)
-        .join('')
-    }
-    return JSON.stringify(message)
+    return null
   }
 
   /**

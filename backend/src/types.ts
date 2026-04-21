@@ -43,8 +43,8 @@ export interface AgentConfig {
 export const wsInitSchema = z.object({
   type: z.literal('init'),
   data: z.object({
-    /** 工作目录路径，必须非空 */
-    workDir: z.string().min(1),
+    /** 工作目录路径（可选，prompt 时会带真实路径） */
+    workDir: z.string().optional(),
     /** API 密钥（可选，用于认证） */
     apiKey: z.string().optional(),
   }),
