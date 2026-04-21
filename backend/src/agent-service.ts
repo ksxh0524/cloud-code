@@ -93,11 +93,9 @@ export class AgentService {
     config: AgentConfig,
     onMessage: (msg: WebSocketMessage) => void
   ): Promise<void> {
-    // 使用存储的配置，如果没有则使用传入的配置
     const stored = this.sessions.get(sessionId)
     const mergedConfig = stored?.config ?? config
 
-    // 构建环境变量
     const env: Record<string, string> = {}
     for (const key of SAFE_ENV_KEYS) {
       const val = process.env[key]
@@ -115,8 +113,10 @@ export class AgentService {
       includePartialMessages: true,
     }
 
+    let toolIdCounter = 0
+    const pendingToolIds: string[] = []
+
     try {
-      // 关闭任何现有的查询迭代器以防止泄漏
       const existing = this.sessions.get(sessionId)
       if (existing?.query) {
         await existing.query.close?.()
@@ -126,7 +126,18 @@ export class AgentService {
       this.sessions.set(sessionId, { query: queryIterator, config: mergedConfig })
 
       for await (const message of queryIterator) {
-        onMessage(this.convertToWebSocketMessage(message, sessionId))
+        const wsMsg = this.convertToWebSocketMessage(message, sessionId)
+
+        if (wsMsg.type === 'tool_call') {
+          const toolId = `tool-${++toolIdCounter}`
+          ;(wsMsg.data as Record<string, unknown>).toolId = toolId
+          pendingToolIds.push(toolId)
+        } else if (wsMsg.type === 'tool_result') {
+          const toolId = pendingToolIds.shift()
+          if (toolId) (wsMsg.data as Record<string, unknown>).toolId = toolId
+        }
+
+        onMessage(wsMsg)
       }
 
       onMessage({ type: 'done', data: null, sessionId })

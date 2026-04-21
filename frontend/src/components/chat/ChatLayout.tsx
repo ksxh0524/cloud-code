@@ -4,6 +4,8 @@ import ConversationList from '../ConversationList'
 import NewConversationModal from '../NewConversationModal'
 import MessageList from '../MessageList'
 import InputBox from '../InputBox'
+import ConnectionBanner from '../ConnectionBanner'
+import EmptyState from '../EmptyState'
 
 /**
  * ChatLayout 组件属性
@@ -27,7 +29,7 @@ interface ChatLayoutProps {
 
   // 消息
   messages: Message[]
-  messagesEndRef: React.RefObject<HTMLDivElement>
+  messagesEndRef: React.RefObject<HTMLDivElement | null>
 
   // 连接状态
   isConnected: boolean
@@ -115,13 +117,14 @@ export function ChatLayout(props: ChatLayoutProps) {
 
       {/* 主内容区 */}
       <main className="main-content">
+        <ConnectionBanner isConnected={isConnected} />
         {/* 顶部导航 */}
         <header className="chat-header">
           <button className="menu-button" onClick={onToggleSidebar}>
             ☰
           </button>
           <div className="chat-title">
-            {currentConversation ? currentConversation.name : '请选择或创建会话'}
+            {currentConversation ? currentConversation.name : 'Cloud Code'}
           </div>
           <div className="header-actions">
             {isStreaming && (
@@ -137,12 +140,9 @@ export function ChatLayout(props: ChatLayoutProps) {
           <div className="chat-content">
             <div className="messages-container">
               {messages.length === 0 ? (
-                <div className="empty-state">
-                  <h2>开始对话</h2>
-                  <p>输入消息开始使用 Claude Code</p>
-                </div>
+                <EmptyState hasConversation onNewConversation={onToggleNewModal} />
               ) : (
-                <MessageList messages={messages} />
+                <MessageList messages={messages} isStreaming={isStreaming} />
               )}
               <div ref={messagesEndRef} />
             </div>
@@ -165,12 +165,7 @@ export function ChatLayout(props: ChatLayoutProps) {
             </div>
           </div>
         ) : (
-          <div className="empty-state">
-            <h2>Cloud Code</h2>
-            <button onClick={onToggleNewModal} className="new-chat-large-btn">
-              + 新建对话
-            </button>
-          </div>
+          <EmptyState hasConversation={false} onNewConversation={onToggleNewModal} />
         )}
       </main>
 

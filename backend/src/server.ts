@@ -7,7 +7,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { agentService } from './agent-service.js'
 import { router } from './routes.js'
 import { logger } from './logger.js'
-import { validateApiKey } from './auth.js'
 import { saveMessages, type StoredMessage } from './store.js'
 import type { AgentConfig } from './types.js'
 import { wsMessageSchema } from './types.js'
@@ -184,15 +183,7 @@ wss.on('connection', (ws: WebSocket) => {
         // ====================
         case 'init': {
           clearTimeout(initTimeout)
-          const { workDir, apiKey } = message.data || {}
-
-          // API 密钥验证
-          if (!validateApiKey(apiKey)) {
-            logger.warn('WebSocket init rejected: invalid API key')
-            safeSend(ws, { type: 'error', data: 'Unauthorized', sessionId })
-            ws.close(4001, 'Unauthorized')
-            return
-          }
+          const { workDir } = message.data || {}
 
           const config: AgentConfig = {
             workDir,
@@ -248,7 +239,7 @@ wss.on('connection', (ws: WebSocket) => {
                 role: (d.role as string) || 'assistant',
                 content: typeof d.content === 'string' ? d.content : JSON.stringify(d.content ?? ''),
                 type: msg.type === 'tool_call' ? 'tool_use' : (msg.type as string),
-                metadata: d.toolName ? { toolName: d.toolName, toolInput: d.toolInput, toolOutput: d.toolOutput } : undefined,
+                metadata: d.toolName ? { toolId: d.toolId, toolName: d.toolName, toolInput: d.toolInput, toolOutput: d.toolOutput } : undefined,
                 timestamp: Date.now(),
               })
             }

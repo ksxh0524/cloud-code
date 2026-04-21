@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import ChatNew from './pages/ChatNew'
 import Settings from './pages/Settings'
+import { ToastContainer } from './components/Toast'
 
 function NotFound() {
   return (
@@ -17,6 +18,7 @@ function NotFound() {
 function App() {
   return (
     <BrowserRouter>
+      <ToastContainer />
       <Routes>
         <Route path="/" element={<ChatNew />} />
         <Route path="/settings" element={<Settings />} />

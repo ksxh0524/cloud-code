@@ -140,9 +140,10 @@ export function useMessages(_conversationId: string | null) {
           {
             id: nextMsgId(),
             role: 'assistant',
-            content: `Using: ${msg.data.toolName}`,
+            content: '',
             type: 'tool_use',
             metadata: {
+              toolId: msg.data.toolId,
               toolName: msg.data.toolName,
               toolInput: msg.data.toolInput,
             },
@@ -153,17 +154,31 @@ export function useMessages(_conversationId: string | null) {
       }
 
       case 'tool_result': {
-        setMessages(prev => [
-          ...prev,
-          {
+        setMessages(prev => {
+          const toolId = msg.data.toolId
+          const idx = prev.findIndex(
+            m => m.type === 'tool_use' && m.metadata?.toolId === toolId
+          )
+          if (idx !== -1) {
+            const updated = [...prev]
+            updated[idx] = {
+              ...updated[idx],
+              metadata: {
+                ...updated[idx].metadata,
+                toolOutput: msg.data.toolOutput,
+              },
+            }
+            return updated
+          }
+          return [...prev, {
             id: nextMsgId(),
             role: 'tool',
             content: msg.data.toolOutput,
             type: 'tool_result',
-            metadata: { toolName: msg.data.toolName },
+            metadata: { toolId: msg.data.toolId, toolName: msg.data.toolName },
             timestamp: Date.now(),
-          },
-        ])
+          }]
+        })
         break
       }
 

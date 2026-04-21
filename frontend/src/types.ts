@@ -14,6 +14,7 @@ export interface Message {
   content: string
   type?: 'text' | 'thinking' | 'tool_use' | 'tool_result'
   metadata?: {
+    toolId?: string
     toolName?: string
     toolInput?: Record<string, unknown>
     toolOutput?: string

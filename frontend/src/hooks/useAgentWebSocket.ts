@@ -44,10 +44,9 @@ export function useAgentWebSocket({
       setIsConnected(true)
       retryCountRef.current = 0
 
-      const apiKey = localStorage.getItem('api_key') || ''
       ws.send(JSON.stringify({
         type: 'init',
-        data: { workDir: workDirRef.current, apiKey },
+        data: { workDir: workDirRef.current },
       }))
     }
 
