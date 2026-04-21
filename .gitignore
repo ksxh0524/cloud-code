@@ -33,6 +33,9 @@ playwright-report/
 .env.local
 .env.*.local
 
+# Runtime
+.pids/
+
 # OS
 Thumbs.db
 .DS_Store

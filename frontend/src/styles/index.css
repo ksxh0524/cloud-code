@@ -15,8 +15,8 @@ html, body {
 
 body {
   font-family: 'Söhne', 'ui-sans-serif', 'system-ui', -apple-system, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Noto Sans', sans-serif;
-  background-color: #ffffff;
-  color: #2e2e2e;
+  background-color: #fff;
+  color: #111;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -47,12 +47,12 @@ button {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c5c5c5;
+  background: #ccc;
   border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a0a0a0;
+  background: #999;
 }
 
 @media (max-width: 768px) {

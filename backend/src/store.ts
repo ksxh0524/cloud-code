@@ -18,12 +18,6 @@ interface Conversation {
 }
 
 interface AppConfig {
-  feishu: {
-    appId: string
-    appSecret: string
-    verifyToken: string
-    encryptKey: string
-  }
   defaultWorkDir: string
 }
 
@@ -33,7 +27,6 @@ interface StoreData {
 }
 
 const DEFAULT_CONFIG: AppConfig = {
-  feishu: { appId: '', appSecret: '', verifyToken: '', encryptKey: '' },
   defaultWorkDir: resolve(homedir(), 'codes'),
 }
 
@@ -101,7 +94,6 @@ export function getConversation(id: string): Conversation | undefined {
 export async function createConversation(data: {
   name: string
   workDir: string
-  cliType: string
 }): Promise<Conversation> {
   return withLock(store => {
     const now = new Date().toISOString()
@@ -109,7 +101,7 @@ export async function createConversation(data: {
       id: crypto.randomUUID(),
       name: data.name,
       workDir: data.workDir,
-      cliType: data.cliType,
+      cliType: 'claude',
       createdAt: now,
       updatedAt: now,
     }
@@ -148,12 +140,12 @@ export async function deleteConversation(id: string): Promise<boolean> {
 // Config
 export function getConfig(): AppConfig {
   const data = loadData()
-  return { ...DEFAULT_CONFIG, ...data.config, feishu: { ...DEFAULT_CONFIG.feishu, ...data.config?.feishu } }
+  return { ...DEFAULT_CONFIG, ...data.config }
 }
 
 export async function updateConfig(updates: Partial<AppConfig>): Promise<AppConfig> {
   return withLock(store => {
-    store.config = { ...store.config, ...updates, feishu: { ...store.config.feishu, ...updates.feishu } }
+    store.config = { ...store.config, ...updates }
     logger.info('Config updated')
     return { result: store.config, store }
   })

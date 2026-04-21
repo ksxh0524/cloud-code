@@ -1,11 +1,9 @@
-export type CliType = 'claude' | 'opencode'
-
 // Keep in sync with backend/src/store.ts Conversation interface
 export interface Conversation {
   id: string
   name: string
   workDir: string
-  cliType: CliType
+  cliType: string
   createdAt: string
   updatedAt: string
 }
@@ -30,14 +28,6 @@ export interface ToolCall {
   status: 'running' | 'completed' | 'error'
 }
 
-export interface FeishuConfig {
-  appId: string
-  appSecret: string
-  verifyToken: string
-  encryptKey: string
-}
-
 export interface AppConfig {
-  feishu: FeishuConfig
   defaultWorkDir: string
 }

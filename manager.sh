@@ -28,7 +28,7 @@ readonly NC='\033[0m'
 # 服务配置: name|port|display_name|workdir|start_cmd|health_path
 readonly SERVICES=(
     "backend|18765|Backend API|backend|pnpm run dev|/api/health"
-    "frontend|18766|Frontend|. |pnpm run dev|/"
+    "frontend|18766|Frontend|frontend|pnpm run dev|/"
 )
 
 # ============================================================================
