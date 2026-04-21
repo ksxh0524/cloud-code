@@ -40,15 +40,16 @@ export default function InputBox({ value, onChange, onSend, onInterrupt, isStrea
       </div>
       <style>{`
         .input-box-container { width: 100%; }
-        .input-box-wrapper { display: flex; gap: 8px; align-items: flex-end; background: #f7f7f8; border-radius: 12px; padding: 8px 12px; border: 1px solid #e5e5e5; }
+        .input-box-wrapper { display: flex; gap: 8px; align-items: flex-end; background: #f7f7f8; border-radius: 14px; padding: 8px 12px; border: 1px solid #e5e5e5; transition: border-color 0.15s; }
+        .input-box-wrapper:focus-within { border-color: #ccc; }
         .input-textarea { flex: 1; min-height: 44px; max-height: 120px; padding: 10px 8px; border: none; background: transparent; font-size: 16px; font-family: inherit; color: #111; outline: none; resize: none; overflow-y: auto; line-height: 1.5; }
         .input-textarea::placeholder { color: #999; }
         .input-textarea:disabled { color: #999; }
-        .send-button { width: 40px; height: 40px; border-radius: 8px; border: none; background: #e5e5e5; color: #999; cursor: not-allowed; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s ease; }
+        .send-button { width: 40px; height: 40px; border-radius: 10px; border: none; background: #e5e5e5; color: #999; cursor: not-allowed; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s ease; }
         .send-button.active { background: #111; color: #fff; cursor: pointer; }
-        .send-button.active:hover { background: #333; }
-        .send-button.interrupt { background: #f0f0f0; color: #111; cursor: pointer; border: 1px solid #e5e5e5; }
-        .send-button.interrupt:hover { background: #e5e5e5; }
+        .send-button.active:hover { background: #333; transform: scale(1.05); }
+        .send-button.interrupt { background: #fef2f2; color: #dc2626; cursor: pointer; border: 1px solid #fecaca; }
+        .send-button.interrupt:hover { background: #fee2e2; }
         @media (max-width: 768px) { .input-textarea { font-size: 16px; } .send-button { width: 44px; height: 44px; } }
       `}</style>
     </div>

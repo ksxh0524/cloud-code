@@ -118,17 +118,18 @@ export default function ConversationList({ conversations, currentId, onSelect, o
         .conv-search { padding: 8px 12px; }
         .conv-search-input {
           width: 100%; padding: 10px 12px;
-          border: 1px solid #e5e5e5; border-radius: 8px;
+          border: 1px solid #e5e5e5; border-radius: 10px;
           font-size: 14px; outline: none; background: #fff;
-          color: #111; min-height: 40px; box-sizing: border-box;
+          color: #111; min-height: 42px; box-sizing: border-box;
+          transition: border-color 0.15s;
         }
-        .conv-search-input:focus { border-color: #999; }
+        .conv-search-input:focus { border-color: #999; box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
         .conv-search-input::placeholder { color: #bbb; }
         .conv-items { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
-        .conv-empty { padding: 32px 16px; text-align: center; color: #999; font-size: 14px; }
+        .conv-empty { padding: 40px 16px; text-align: center; color: #999; font-size: 14px; }
         .conv-item {
           display: flex; align-items: center; padding: 12px;
-          cursor: pointer; border-radius: 8px; margin-bottom: 2px;
+          cursor: pointer; border-radius: 10px; margin-bottom: 2px;
           position: relative; transition: background 0.15s;
         }
         .conv-item:hover { background: #f0f0f0; }
@@ -143,19 +144,22 @@ export default function ConversationList({ conversations, currentId, onSelect, o
         .conv-dot { font-size: 10px; color: #ccc; }
         .conv-time { font-size: 12px; color: #bbb; }
         .conv-menu {
-          background: none; border: none; font-size: 16px;
-          color: #999; cursor: pointer; padding: 8px;
-          min-width: 40px; min-height: 40px;
+          background: none; border: none; font-size: 18px;
+          color: #999; cursor: pointer; padding: 6px;
+          min-width: 36px; min-height: 36px;
           display: flex; align-items: center; justify-content: center;
-          opacity: 0; transition: opacity 0.15s; border-radius: 6px;
+          opacity: 0; transition: opacity 0.15s; border-radius: 8px;
         }
         .conv-item:hover .conv-menu { opacity: 1; }
-        @media (max-width: 768px) { .conv-menu { opacity: 1; } }
+        .conv-menu:hover { background: #e0e0e0; }
+        @media (max-width: 768px) {
+          .conv-menu { opacity: 1; min-width: 44px; min-height: 44px; }
+        }
         .conv-actions {
           position: absolute; top: 100%; right: 8px;
           background: #fff; border: 1px solid #e5e5e5;
-          border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-          z-index: 10; min-width: 120px; overflow: hidden;
+          border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+          z-index: 10; min-width: 130px; overflow: hidden;
         }
         .conv-action {
           padding: 12px 16px; font-size: 14px; color: #111;
@@ -164,37 +168,47 @@ export default function ConversationList({ conversations, currentId, onSelect, o
         }
         .conv-action:hover { background: #f7f7f8; }
         .conv-action.delete { color: #dc2626; }
+        .conv-action.delete:hover { background: #fef2f2; }
         .conv-edit { display: flex; align-items: center; gap: 8px; width: 100%; }
         .conv-edit-input {
           flex: 1; padding: 8px 10px; border: 1px solid #e5e5e5;
-          border-radius: 6px; font-size: 14px; outline: none;
+          border-radius: 8px; font-size: 14px; outline: none;
           min-height: 40px; background: #fff; color: #111;
         }
         .conv-edit-input:focus { border-color: #999; }
         .conv-edit-save {
-          background: #111; color: #fff; border: none; border-radius: 6px;
+          background: #111; color: #fff; border: none; border-radius: 8px;
           min-width: 40px; min-height: 40px; cursor: pointer;
           font-size: 14px; display: flex; align-items: center; justify-content: center;
         }
         .conv-delete-overlay {
           position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0,0,0,0.3); display: flex;
+          background: rgba(0,0,0,0.4); display: flex;
           align-items: center; justify-content: center;
           z-index: 1000; padding: 16px;
+          animation: fade-in 0.15s ease-out;
         }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
         .conv-delete-dialog {
-          background: #fff; border-radius: 12px; padding: 24px;
-          min-width: 280px; max-width: 90vw;
+          background: #fff; border-radius: 16px; padding: 24px;
+          min-width: 300px; max-width: 90vw;
+          box-shadow: 0 16px 48px rgba(0,0,0,0.15);
+          animation: dialog-in 0.2s ease-out;
         }
-        .conv-delete-header { font-size: 17px; font-weight: 600; color: #111; margin-bottom: 12px; }
-        .conv-delete-body p { font-size: 15px; color: #666; }
-        .conv-delete-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+        @keyframes dialog-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .conv-delete-header { font-size: 17px; font-weight: 600; color: #111; margin-bottom: 8px; }
+        .conv-delete-body p { font-size: 14px; color: #666; line-height: 1.5; }
+        .conv-delete-actions { display: flex; gap: 10px; margin-top: 20px; }
+        .conv-delete-actions .conv-delete-btn { flex: 1; }
         .conv-delete-btn {
-          padding: 10px 20px; border-radius: 8px;
-          font-size: 15px; cursor: pointer; min-height: 44px;
+          padding: 12px 20px; border-radius: 10px;
+          font-size: 15px; font-weight: 500; cursor: pointer; min-height: 46px;
+          transition: all 0.15s;
         }
-        .conv-delete-btn.cancel { background: #f0f0f0; border: 1px solid #e5e5e5; color: #111; }
-        .conv-delete-btn.confirm { background: #111; border: none; color: #fff; font-weight: 500; }
+        .conv-delete-btn.cancel { background: #f5f5f5; border: none; color: #555; }
+        .conv-delete-btn.cancel:hover { background: #eee; }
+        .conv-delete-btn.confirm { background: #dc2626; border: none; color: #fff; }
+        .conv-delete-btn.confirm:hover { background: #b91c1c; }
       `}</style>
     </div>
   )

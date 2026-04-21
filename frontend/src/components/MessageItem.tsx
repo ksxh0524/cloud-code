@@ -43,13 +43,14 @@ export default React.memo(function MessageItem({ message, isStreaming }: Message
         <style>{`
           .msg-user { display: flex; justify-content: flex-end; }
           .msg-user-text {
-            max-width: 85%; padding: 10px 14px;
-            background: #f0f0f0; border-radius: 16px 16px 4px 16px;
-            font-size: 15px; line-height: 1.5; color: #111;
+            max-width: 80%; padding: 10px 16px;
+            background: #111; color: #fff;
+            border-radius: 18px 18px 4px 18px;
+            font-size: 15px; line-height: 1.5;
             white-space: pre-wrap; word-break: break-word;
           }
           @media (max-width: 768px) {
-            .msg-user-text { font-size: 14px; max-width: 90%; }
+            .msg-user-text { font-size: 15px; max-width: 85%; padding: 10px 14px; }
           }
         `}</style>
       </div>
@@ -70,19 +71,23 @@ export default React.memo(function MessageItem({ message, isStreaming }: Message
         <style>{`
           .thinking-toggle {
             display: inline-flex; align-items: center; gap: 6px;
-            background: none; border: none; padding: 4px 0;
+            background: none; border: none; padding: 6px 0;
             color: #999; font-size: 12px; cursor: pointer;
+            min-height: 36px;
           }
           .thinking-toggle:hover { color: #666; }
           .thinking-arrow { font-size: 10px; }
-          .thinking-label { font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
-          .thinking-preview { font-size: 13px; color: #aaa; line-height: 1.4; margin-top: 2px; }
+          .thinking-label { font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px; }
+          .thinking-preview { font-size: 13px; color: #bbb; line-height: 1.4; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px; }
           .thinking-body {
-            margin-top: 6px; padding: 10px 12px;
-            background: #f9f9f9; border-radius: 6px;
-            font-size: 13px; color: #888; line-height: 1.5;
+            margin-top: 8px; padding: 12px 14px;
+            background: #f7f7f8; border-radius: 8px;
+            font-size: 13px; color: #888; line-height: 1.6;
             white-space: pre-wrap; word-break: break-word;
-            font-style: italic;
+            font-style: italic; border: 1px solid #eee;
+          }
+          @media (max-width: 768px) {
+            .thinking-preview { max-width: 260px; }
           }
         `}</style>
       </div>

@@ -85,10 +85,11 @@ export function ChatLayout(props: ChatLayoutProps) {
             onClick={onToggleNewModal}
             className="new-chat-btn"
           >
-            + 新建对话
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+            新建对话
           </button>
-          <button className="close-sidebar" onClick={onToggleSidebar}>
-            ←
+          <button className="close-sidebar" onClick={onToggleSidebar} aria-label="关闭侧边栏">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           </button>
         </div>
 
@@ -120,8 +121,8 @@ export function ChatLayout(props: ChatLayoutProps) {
         <ConnectionBanner isConnected={isConnected} />
         {/* 顶部导航 */}
         <header className="chat-header">
-          <button className="menu-button" onClick={onToggleSidebar}>
-            ☰
+          <button className="menu-button" onClick={onToggleSidebar} aria-label="打开菜单">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
           </button>
           <div className="chat-title">
             {currentConversation ? currentConversation.name : 'Cloud Code'}
@@ -129,6 +130,7 @@ export function ChatLayout(props: ChatLayoutProps) {
           <div className="header-actions">
             {isStreaming && (
               <button className="interrupt-btn" onClick={onInterrupt}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
                 停止
               </button>
             )}
@@ -180,26 +182,26 @@ export function ChatLayout(props: ChatLayoutProps) {
         .chat-container { display: flex; width: 100%; height: 100vh; overflow: hidden; background: #fff; }
         .sidebar { width: 260px; background: #f7f7f8; border-right: 1px solid #e5e5e5; display: flex; flex-direction: column; position: relative; z-index: 100; }
         .sidebar-header { padding: 12px; border-bottom: 1px solid #e5e5e5; display: flex; gap: 8px; align-items: center; }
-        .new-chat-btn { flex: 1; padding: 10px 12px; background: #111; border: none; border-radius: 6px; color: #fff; font-size: 14px; cursor: pointer; transition: background 0.2s; min-height: 40px; }
+        .new-chat-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 12px; background: #111; border: none; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s; min-height: 42px; }
         .new-chat-btn:hover { background: #333; }
-        .close-sidebar { display: none; background: none; border: none; font-size: 16px; color: #666; cursor: pointer; padding: 8px; min-width: 40px; min-height: 40px; align-items: center; justify-content: center; border-radius: 6px; }
-        .close-sidebar:hover { color: #111; }
-        .sidebar-footer { padding: 12px; border-top: 1px solid #e5e5e5; display: flex; flex-direction: column; gap: 8px; }
-        .connection-status { display: flex; align-items: center; gap: 8px; padding: 8px; font-size: 12px; color: #666; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .status-dot.connected { background: #111; }
+        .close-sidebar { display: none; background: none; border: none; color: #666; cursor: pointer; padding: 8px; min-width: 40px; min-height: 40px; align-items: center; justify-content: center; border-radius: 8px; transition: all 0.15s; }
+        .close-sidebar:hover { background: #eee; color: #111; }
+        .sidebar-footer { padding: 12px; border-top: 1px solid #e5e5e5; display: flex; flex-direction: column; gap: 4px; }
+        .connection-status { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 12px; color: #888; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .status-dot.connected { background: #16a34a; }
         .status-dot.disconnected { background: #ccc; }
-        .settings-link { display: flex; align-items: center; gap: 8px; padding: 10px; color: #111; text-decoration: none; border-radius: 6px; transition: background 0.2s; font-size: 14px; }
-        .settings-link:hover { background: #eee; }
+        .settings-link { display: flex; align-items: center; gap: 8px; padding: 10px; color: #555; text-decoration: none; border-radius: 8px; transition: background 0.15s; font-size: 14px; min-height: 44px; }
+        .settings-link:hover { background: #eee; color: #111; }
         .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 90; cursor: pointer; }
         .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
         .chat-header { height: 56px; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; padding: 0 16px; gap: 12px; background: #fff; }
-        .menu-button { display: none; background: none; border: none; font-size: 20px; cursor: pointer; padding: 8px; color: #111; min-width: 40px; min-height: 40px; border-radius: 6px; }
+        .menu-button { display: none; background: none; border: none; cursor: pointer; padding: 8px; color: #333; min-width: 40px; min-height: 40px; border-radius: 8px; align-items: center; justify-content: center; transition: background 0.15s; }
         .menu-button:hover { background: #f0f0f0; }
-        .chat-title { flex: 1; font-size: 16px; font-weight: 500; color: #111; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .chat-title { flex: 1; font-size: 16px; font-weight: 600; color: #111; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .header-actions { display: flex; gap: 8px; }
-        .interrupt-btn { padding: 8px 12px; background: #f0f0f0; color: #111; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 13px; cursor: pointer; transition: background 0.2s; }
-        .interrupt-btn:hover { background: #e5e5e5; }
+        .interrupt-btn { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+        .interrupt-btn:hover { background: #fee2e2; border-color: #fca5a5; }
         .chat-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .messages-container { flex: 1; overflow-y: auto; padding: 16px; }
         .input-container { padding: 16px; border-top: 1px solid #e5e5e5; background: #fff; }
