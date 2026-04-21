@@ -9,7 +9,7 @@ Cloud Code is a mobile-optimized web interface for Claude Code. Users interact w
 ## Tech Stack
 
 - **Backend**: Node.js + Express 4 + `@anthropic-ai/claude-agent-sdk` + WebSocket (`ws`) + helmet
-- **Frontend**: React 19 + Vite 6 + TypeScript + `@headlessui/react` + CSS Modules
+- **Frontend**: React 19 + Vite 6 + TypeScript + `@headlessui/react` + `react-markdown` + `react-syntax-highlighter` + CSS Modules
 - **Validation**: Zod on both REST endpoints and WebSocket messages
 - **Data**: `~/.cloud-code/data.json` (conversations + config) + `~/.cloud-code/messages/{id}.json` (per-conversation messages)
 - **Testing**: Vitest (backend & frontend unit), Playwright (E2E)
@@ -27,13 +27,22 @@ pnpm dev:all
 cd backend && pnpm dev          # Backend on port 18765 (tsx watch)
 pnpm dev                        # Frontend on port 18766 (Vite)
 
+# Production service management via manager.sh
+./manager.sh start              # Start both services (dev mode)
+./manager.sh start --prod       # Start in production mode (requires build first)
+./manager.sh stop               # Stop all services
+./manager.sh restart            # Restart all services
+./manager.sh status             # Check service status
+./manager.sh logs [backend|frontend]  # View logs
+./manager.sh build              # Build production artifacts
+
 # Build
 pnpm build                      # Frontend + Backend production build
 
 # Test
-cd backend && pnpm test                          # Backend unit tests (Vitest)
+cd backend && pnpm test                          # Backend unit tests (Vitest + supertest)
 cd backend && pnpm test:watch                    # Backend tests in watch mode
-cd frontend && pnpm test                         # Frontend unit tests (Vitest)
+cd frontend && pnpm test                         # Frontend unit tests (Vitest + @testing-library/react)
 cd frontend && pnpm test:watch                   # Frontend tests in watch mode
 npx playwright test                              # All E2E tests
 npx playwright test test/mobile-ui.spec.ts       # Single E2E file
@@ -67,6 +76,8 @@ pnpm format
 - `components/ErrorBoundary.tsx` — React Error Boundary with retry UI.
 - `components/chat/ChatLayout.tsx` — Layout component.
 - `lib/fetch.ts` — `authFetch()` wraps `fetch()` and attaches `x-api-key` header from `localStorage.getItem('api_key')`.
+- `lib/logger.ts` — Frontend logger utility.
+- `lib/commands.ts` — Slash command definitions and parsing (`/clear`, `/compact`, `/help`, `/model`, `/cost`, `/status`).
 - `types.ts` — `WsServerMessage` discriminated union type for type-safe WebSocket message handling.
 - **CSS Architecture**: All components use CSS Modules (`*.module.css`). Design tokens in `styles/tokens.css`, shared animations in `styles/animations.css`.
 
@@ -119,7 +130,8 @@ Vite proxies `/api` to the backend and `/ws` for WebSocket in dev mode.
 - CSS Modules: `Component.tsx` → `Component.module.css`, design tokens in `styles/tokens.css`
 - Mobile-first: 44px min touch targets, `env(safe-area-inset-*)` support
 - TypeScript strict mode in both frontend and backend
-- No `any` types — use discriminated unions for WebSocket messages
+- No `any` types — use discriminated unions for WebSocket messages (ESLint `no-explicit-any: warn`)
+- Commit messages follow conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`
 
 ## Environment
 
@@ -131,6 +143,7 @@ Vite proxies `/api` to the backend and `/ws` for WebSocket in dev mode.
   - `LOG_LEVEL` — Logging level (default `info`)
   - `API_KEY` — Optional API key for access control (timing-safe comparison)
   - `ALLOWED_ORIGINS` — CORS origins, comma-separated (default: `http://localhost:18766`)
+  - `DATA_DIR` — Data storage directory (default: `~/.cloud-code`)
   - `ANTHROPIC_API_KEY` — Optional native Claude API key
 - SDK automatically reads `~/.claude/settings.json` and `~/.claude/mcp.json` via `settingSources`
 
