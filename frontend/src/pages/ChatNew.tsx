@@ -39,7 +39,7 @@ export default function ChatNew() {
     addUserMessage(inputValue)
     setInputValue('')
     setIsStreaming(true)
-    sendMessage({ type: 'prompt', data: { prompt: inputValue, workDir: currentConversation.workDir, conversationId } })
+    sendMessage({ type: 'prompt', data: { prompt: inputValue, workDir: currentConversation.workDir, ...(conversationId ? { conversationId } : {}) } })
   }
 
   const handleInterrupt = () => {
