@@ -1,5 +1,5 @@
-import { query, type Query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentConfig, WebSocketMessage } from './types.js'
+import { query, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { AgentConfig, WebSocketMessage, HistoryMessage } from './types.js'
 import { logger } from './logger.js'
 
 /**
@@ -11,6 +11,10 @@ interface SessionData {
   query: Query | null
   /** 会话配置 */
   config: AgentConfig
+  /** SDK Session ID（用于恢复） */
+  sdkSessionId?: string
+  /** 会话历史消息 */
+  history: HistoryMessage[]
 }
 
 /**
@@ -34,7 +38,7 @@ const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'TERM', 'SHELL', 'TMPDIR', 'USER'
  *
  * // 流式发送消息
  * await agentService.streamMessage(
- *   'session-id',
+ *   'session-1',
  *   'Hello',
  *   { workDir: '/tmp' },
  *   (msg) => console.log(msg)
@@ -56,7 +60,31 @@ export class AgentService {
    * @returns Promise<void>
    */
   async createSession(sessionId: string, config: AgentConfig): Promise<void> {
-    this.sessions.set(sessionId, { query: null, config })
+    this.sessions.set(sessionId, { query: null, config, history: [] })
+  }
+
+  /**
+   * 更新会话历史消息
+   *
+   * @param sessionId - 会话 ID
+   * @param history - 历史消息列表
+   */
+  updateSessionHistory(sessionId: string, history: HistoryMessage[]): void {
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.history = history
+      logger.debug({ sessionId, historyLength: history.length }, 'Session history updated')
+    }
+  }
+
+  /**
+   * 获取会话的 SDK Session ID
+   *
+   * @param sessionId - 会话 ID
+   * @returns SDK Session ID 或 undefined
+   */
+  getSdkSessionId(sessionId: string): string | undefined {
+    return this.sessions.get(sessionId)?.sdkSessionId
   }
 
   /**
@@ -64,11 +92,13 @@ export class AgentService {
    *
    * 使用 Claude Agent SDK 的 query 函数，支持流式响应和工具调用。
    * 消息会逐条通过 onMessage 回调返回。
+   * 支持多轮对话：自动传递历史消息作为上下文，并使用 SDK 的 session 恢复功能。
    *
    * @param sessionId - 会话 ID
    * @param prompt - 用户输入的提示文本
    * @param config - Agent 配置（会与初始化时的配置合并）
    * @param onMessage - 消息回调函数，接收每条 WebSocket 消息
+   * @param history - 可选的历史消息列表，用于多轮对话上下文
    * @returns Promise<void>
    *
    * @example
@@ -77,13 +107,8 @@ export class AgentService {
    *   'session-1',
    *   'List files in current directory',
    *   { workDir: '/tmp' },
-   *   (msg) => {
-   *     if (msg.type === 'stream') {
-   *       console.log('Stream:', msg.data.delta.text)
-   *     } else if (msg.type === 'tool_call') {
-   *       console.log('Tool:', msg.data.toolName)
-   *     }
-   *   }
+   *   (msg) => console.log(msg),
+   *   [{ role: 'user', content: 'Previous message' }, { role: 'assistant', content: 'Previous response' }]
    * )
    * ```
    */
@@ -91,7 +116,8 @@ export class AgentService {
     sessionId: string,
     prompt: string,
     config: AgentConfig,
-    onMessage: (msg: WebSocketMessage) => void
+    onMessage: (msg: WebSocketMessage) => void,
+    history?: HistoryMessage[]
   ): Promise<void> {
     const stored = this.sessions.get(sessionId)
     const mergedConfig = stored?.config ?? config
@@ -103,17 +129,76 @@ export class AgentService {
     }
     Object.assign(env, mergedConfig.env)
 
-    const options = {
+    // 构建 prompt：如果有历史消息，格式化为多轮对话
+    // 构建 prompt：如果有历史消息，格式化为多轮对话
+    // 注意：prompt 可以是 string 或 AsyncIterable<SDKUserMessage>
+    // 我们使用 generator function 来创建 AsyncIterable
+    const buildPrompt = async function* () {
+      if (history && history.length > 0) {
+        // 先发送历史消息
+        for (const msg of history) {
+          if (msg.role === 'user') {
+            yield {
+              type: 'user' as const,
+              message: {
+                role: 'user' as const,
+                content: msg.content,
+              },
+            } as SDKUserMessage
+          } else if (msg.role === 'assistant') {
+            yield {
+              type: 'user' as const,
+              message: {
+                role: 'assistant' as const,
+                content: [{ type: 'text' as const, text: msg.content }],
+              },
+            } as unknown as SDKUserMessage
+          }
+        }
+      }
+      // 最后发送当前消息
+      yield {
+        type: 'user' as const,
+        message: {
+          role: 'user' as const,
+          content: prompt,
+        },
+      } as SDKUserMessage
+    }
+
+    // 构建选项：使用 resume 或 sessionId 来保持会话连续性
+    const options: Record<string, unknown> = {
       cwd: mergedConfig.workDir,
       env,
       allowedTools: mergedConfig.allowedTools || ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep'],
       permissionMode: mergedConfig.permissionMode || 'acceptEdits',
       maxTurns: mergedConfig.maxTurns || 50,
       persistSession: true,
+      // 启用调试输出
+      debug: process.env.NODE_ENV === 'development' || process.env.LOG_LEVEL === 'debug',
+      // stderr 回调用于捕获 SDK 调试日志
+      stderr: (data: string) => {
+        logger.debug({ sessionId, sdkData: data.trim() }, 'SDK stderr')
+      },
     }
+
+    // 如果有 SDK Session ID，使用 resume 来恢复会话
+    if (mergedConfig.sdkSessionId) {
+      options.resume = mergedConfig.sdkSessionId
+      logger.debug({ sessionId, sdkSessionId: mergedConfig.sdkSessionId }, 'Resuming SDK session')
+    }
+
+    logger.info({
+      sessionId,
+      workDir: mergedConfig.workDir,
+      hasHistory: !!history && history.length > 0,
+      historyLength: history?.length || 0,
+      resumeSession: !!mergedConfig.sdkSessionId,
+    }, 'Starting agent stream')
 
     let toolIdCounter = 0
     const pendingToolIds: string[] = []
+    let sdkSessionId: string | undefined
 
     try {
       const existing = this.sessions.get(sessionId)
@@ -121,10 +206,26 @@ export class AgentService {
         await existing.query.close?.()
       }
 
-      const queryIterator = query({ prompt, options })
-      this.sessions.set(sessionId, { query: queryIterator, config: mergedConfig })
+      const queryIterator = query({ prompt: buildPrompt(), options })
+      this.sessions.set(sessionId, {
+        query: queryIterator,
+        config: mergedConfig,
+        history: history || [],
+        sdkSessionId: mergedConfig.sdkSessionId,
+      })
 
       for await (const message of queryIterator) {
+        // 捕获 SDK Session ID
+        const msgWithSession = message as Record<string, unknown>
+        if (msgWithSession.session_id && typeof msgWithSession.session_id === 'string') {
+          sdkSessionId = msgWithSession.session_id
+          // 更新会话中的 SDK Session ID
+          const session = this.sessions.get(sessionId)
+          if (session) {
+            session.sdkSessionId = sdkSessionId
+          }
+        }
+
         const wsMsgs = this.convertToWebSocketMessages(message, sessionId)
         for (const wsMsg of wsMsgs) {
           if (wsMsg.type === 'tool_call') {
@@ -139,8 +240,8 @@ export class AgentService {
         }
       }
 
-      onMessage({ type: 'done', data: null, sessionId })
-      logger.info({ sessionId }, 'Stream completed')
+      onMessage({ type: 'done', data: { sdkSessionId }, sessionId })
+      logger.info({ sessionId, sdkSessionId }, 'Stream completed')
     } catch (error) {
       logger.error({ err: error, sessionId }, 'Stream error')
       onMessage({
@@ -150,6 +251,8 @@ export class AgentService {
       })
     }
   }
+
+
 
   /**
    * 将 SDK 消息转换为 WebSocket 消息数组
@@ -227,17 +330,24 @@ export class AgentService {
    * 关闭会话
    *
    * 释放会话资源，关闭活跃的查询迭代器。
+   * 保留 SDK Session ID 以便后续恢复。
    *
    * @param sessionId - 会话 ID
-   * @returns Promise<void>
+   * @returns Promise<{ sdkSessionId?: string, history: HistoryMessage[] } | null>
    */
-  async closeSession(sessionId: string): Promise<void> {
+  async closeSession(sessionId: string): Promise<{ sdkSessionId?: string, history: HistoryMessage[] } | null> {
     const session = this.sessions.get(sessionId)
     if (session) {
       await session.query?.close?.()
+      const result = {
+        sdkSessionId: session.sdkSessionId,
+        history: session.history,
+      }
       this.sessions.delete(sessionId)
-      logger.info({ sessionId }, 'Session closed')
+      logger.info({ sessionId, sdkSessionId: result.sdkSessionId }, 'Session closed')
+      return result
     }
+    return null
   }
 
   /**

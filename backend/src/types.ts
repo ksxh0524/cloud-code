@@ -28,6 +28,20 @@ export interface AgentConfig {
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions'
   /** 最大对话轮数（可选） */
   maxTurns?: number
+  /** SDK Session ID（用于恢复会话） */
+  sdkSessionId?: string
+  /** 是否继续之前的会话 */
+  resume?: boolean
+}
+
+/**
+ * 历史消息接口
+ * 用于传递给 SDK 作为上下文
+ */
+export interface HistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp?: number
 }
 
 // ============================================
@@ -54,7 +68,7 @@ export const wsInitSchema = z.object({
  * WebSocket 提示消息 Schema
  * 用户发送的消息
  * @example
- * { type: 'prompt', data: { prompt: 'Hello', workDir: '/path', conversationId: 'xxx' } }
+ * { type: 'prompt', data: { prompt: 'Hello', workDir: '/path', conversationId: 'xxx', history: [...] } }
  */
 export const wsPromptSchema = z.object({
   type: z.literal('prompt'),
@@ -65,6 +79,14 @@ export const wsPromptSchema = z.object({
     workDir: z.string().min(1),
     /** 关联的会话 ID（可选） */
     conversationId: z.string().optional(),
+    /** 历史消息列表（可选） */
+    history: z.array(z.object({
+      role: z.enum(['user', 'assistant']),
+      content: z.string(),
+      timestamp: z.number().optional(),
+    })).optional(),
+    /** SDK Session ID（用于恢复会话） */
+    sdkSessionId: z.string().optional(),
   }),
 })
 
