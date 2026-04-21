@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import CustomSelect from './CustomSelect'
 import { authFetch } from '../lib/fetch'
+import { logger } from '../lib/logger'
 
 interface WorkDir {
   path: string
@@ -33,8 +34,10 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
       setWorkDirs(data)
       const configDir = data.find((d: WorkDir) => d.isConfig)
       if (configDir) { setSelectedDir(configDir.path); loadSubDirs(configDir.path) }
-    } catch { setWorkDirs([]) }
-    finally { setLoading(false) }
+    } catch (err) {
+      logger.error('Failed to load work directories', { error: String(err) })
+      setWorkDirs([])
+    } finally { setLoading(false) }
   }
 
   const loadSubDirs = async (path: string) => {
@@ -43,7 +46,10 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
       if (!res.ok) throw new Error('Failed')
       setSubDirs(await res.json())
       setSelectedSubDir('')
-    } catch { setSubDirs([]) }
+    } catch (err) {
+      logger.error('Failed to load sub directories', { path, error: String(err) })
+      setSubDirs([])
+    }
   }
 
   const handleDirChange = (path: string) => { setSelectedDir(path); setSelectedSubDir(''); loadSubDirs(path) }
