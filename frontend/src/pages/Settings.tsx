@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { AppConfig } from '../types'
 import { authFetch } from '../lib/fetch'
+import { logger } from '../lib/logger'
 
 export default function Settings() {
   const [config, setConfig] = useState<AppConfig | null>(null)
@@ -18,6 +19,7 @@ export default function Settings() {
       if (!res.ok) throw new Error(`加载失败 (${res.status})`)
       setConfig(await res.json())
     } catch (err) {
+      logger.error('Failed to load config', { error: String(err) })
       setError(err instanceof Error ? err.message : '加载配置失败')
     }
   }
@@ -32,6 +34,7 @@ export default function Settings() {
       if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000) }
       else throw new Error(`保存失败 (${res.status})`)
     } catch (err) {
+      logger.error('Failed to save config', { error: String(err) })
       setError(err instanceof Error ? err.message : '保存失败')
     } finally { setSaving(false) }
   }
