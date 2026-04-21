@@ -138,8 +138,14 @@ wss.on('connection', (ws: WebSocket) => {
   /** 当前关联的会话 ID */
   let currentConversationId: string | null = null
 
-  /** 消息累加器（用于持久化） */
-  const messageAccumulator: StoredMessage[] = []
+      /** 消息累加器（用于持久化） */
+      const messageAccumulator: StoredMessage[] = []
+
+      /** SDK Session ID（用于恢复会话） */
+      let sdkSessionId: string | undefined = undefined
+
+      /** 当前对话历史（用于多轮对话上下文） */
+      let conversationHistory: { role: 'user' | 'assistant', content: string, timestamp?: number }[] = []
 
   // 初始化超时处理
   const initTimeout = setTimeout(() => {
@@ -166,12 +172,19 @@ wss.on('connection', (ws: WebSocket) => {
 
   // 消息处理
   ws.on('message', async (data: Buffer) => {
+    const messageStartTime = Date.now()
     try {
       const raw = JSON.parse(data.toString())
+      logger.debug({
+        sessionId,
+        messageType: raw.type,
+        rawData: data.toString().slice(0, 500), // 限制日志长度
+      }, 'WebSocket message received')
 
       // 验证消息格式
       const parseResult = wsMessageSchema.safeParse(raw)
       if (!parseResult.success) {
+        logger.warn({ sessionId, error: parseResult.error.errors }, 'Invalid message format')
         safeSend(ws, { type: 'error', data: 'Invalid message format', sessionId })
         return
       }
@@ -210,14 +223,41 @@ wss.on('connection', (ws: WebSocket) => {
             return
           }
 
-          const { prompt, workDir, conversationId } = message.data
+          const { prompt, workDir, conversationId, history, sdkSessionId: existingSdkSessionId } = message.data
           currentConversationId = conversationId || null
 
-          logger.info({ sessionId, promptLength: prompt?.length, conversationId }, 'Prompt received')
+          // 更新历史记录
+          if (history && Array.isArray(history)) {
+            conversationHistory = history
+          }
 
-          const config: AgentConfig = { workDir }
+          // 如果消息中传入了已有的 SDK Session ID，使用它来恢复会话
+          if (existingSdkSessionId) {
+            sdkSessionId = existingSdkSessionId
+            logger.debug({ sessionId, sdkSessionId }, 'Using existing SDK session ID')
+          }
 
-          // 记录用户消息
+          logger.info({
+            sessionId,
+            promptLength: prompt?.length,
+            conversationId,
+            hasHistory: conversationHistory.length > 0,
+            hasSdkSessionId: !!sdkSessionId,
+          }, 'Prompt received')
+
+          const config: AgentConfig = {
+            workDir,
+            sdkSessionId, // 传递 SDK Session ID 以支持会话恢复
+          }
+
+          // 记录用户消息到历史
+          conversationHistory.push({
+            role: 'user',
+            content: prompt,
+            timestamp: Date.now(),
+          })
+
+          // 记录用户消息用于持久化
           const userMsg: StoredMessage = {
             id: `${Date.now()}-user`,
             role: 'user',
@@ -228,31 +268,84 @@ wss.on('connection', (ws: WebSocket) => {
           messageAccumulator.push(userMsg)
 
           // 流式处理 Agent 响应
+          const streamStartTime = Date.now()
           await agentService.streamMessage(sessionId, prompt, config, msg => {
             safeSend(ws, msg)
+
+            // 记录消息到日志
+            const msgData = msg.data as Record<string, unknown>
+            if (msg.type === 'message') {
+              logger.debug({
+                sessionId,
+                role: msgData.role,
+                content: typeof msgData.content === 'string'
+                  ? String(msgData.content).slice(0, 200) + '...'
+                  : 'non-text content',
+              }, 'Agent message received')
+            } else if (msg.type === 'tool_call') {
+              logger.info({
+                sessionId,
+                toolName: msgData.toolName,
+                toolInput: msgData.toolInput,
+              }, 'Tool call')
+            } else if (msg.type === 'error') {
+              logger.error({ sessionId, error: msg.data }, 'Stream error received')
+            }
 
             // 收集消息用于持久化
             if (msg.type === 'message' || msg.type === 'thinking' || msg.type === 'tool_call' || msg.type === 'tool_result') {
               const d = msg.data as Record<string, unknown>
+              const role = (d.role as string) || 'assistant'
+              const content = typeof d.content === 'string' ? d.content : JSON.stringify(d.content ?? '')
+
+              // 添加到历史记录
+              if (msg.type === 'message' && role === 'assistant') {
+                conversationHistory.push({
+                  role: 'assistant',
+                  content,
+                  timestamp: Date.now(),
+                })
+              }
+
               messageAccumulator.push({
                 id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                role: (d.role as string) || 'assistant',
-                content: typeof d.content === 'string' ? d.content : JSON.stringify(d.content ?? ''),
+                role,
+                content,
                 type: msg.type === 'tool_call' ? 'tool_use' : (msg.type as string),
                 metadata: d.toolName ? { toolId: d.toolId, toolName: d.toolName, toolInput: d.toolInput, toolOutput: d.toolOutput } : undefined,
                 timestamp: Date.now(),
               })
             }
 
-            // 完成后保存消息
-            if (msg.type === 'done' && currentConversationId) {
-              const msgsToSave = [...messageAccumulator]
-              messageAccumulator.length = 0
-              saveMessages(currentConversationId, msgsToSave).catch(err => {
-                logger.error({ err, conversationId: currentConversationId }, 'Failed to save messages')
-              })
+            // 捕获 SDK Session ID
+            if (msg.type === 'done') {
+              const doneData = msg.data as Record<string, unknown> | null
+              if (doneData?.sdkSessionId && typeof doneData.sdkSessionId === 'string') {
+                sdkSessionId = doneData.sdkSessionId
+                logger.debug({ sessionId, sdkSessionId }, 'SDK Session ID captured')
+              }
+
+              const duration = Date.now() - streamStartTime
+              logger.info({
+                sessionId,
+                duration,
+                messageCount: messageAccumulator.length,
+                sdkSessionId,
+              }, 'Stream completed')
+
+              // 完成后保存消息
+              if (currentConversationId && messageAccumulator.length > 0) {
+                const msgsToSave = [...messageAccumulator]
+                messageAccumulator.length = 0
+                saveMessages(currentConversationId, msgsToSave).catch(err => {
+                  logger.error({ err, conversationId: currentConversationId }, 'Failed to save messages')
+                })
+              }
             }
-          })
+          }, conversationHistory)
+
+          const promptDuration = Date.now() - messageStartTime
+          logger.info({ sessionId, duration: promptDuration }, 'Prompt processing completed')
           break
         }
 
@@ -312,8 +405,13 @@ wss.on('connection', (ws: WebSocket) => {
       }
     }
 
-    logger.info({ sessionId }, 'WebSocket disconnected')
-    await agentService.closeSession(sessionId)
+    // 关闭会话，获取 SDK Session ID 以便后续恢复
+    const sessionInfo = await agentService.closeSession(sessionId)
+    logger.info({
+      sessionId,
+      sdkSessionId: sessionInfo?.sdkSessionId,
+      historyLength: sessionInfo?.history.length,
+    }, 'WebSocket disconnected, session state preserved')
   })
 
   ws.on('error', err => {
