@@ -216,7 +216,17 @@ export function ChatLayout(props: ChatLayoutProps) {
           .menu-button { display: flex; }
           .messages-container { padding: 12px; }
           .input-container { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-          .chat-header { padding-top: max(8px, env(safe-area-inset-top)); }
+          .chat-header { 
+            height: 56px; 
+            min-height: 56px;
+            padding-top: 12px;
+            padding-bottom: 8px;
+            flex-shrink: 0;
+          }
+          /* 只在真正支持安全区域的设备（刘海屏）上增加额外的顶部间距 */
+          @supports (padding-top: max(0px, env(safe-area-inset-top))) {
+            .chat-header { padding-top: max(12px, env(safe-area-inset-top)); }
+          }
         }
       `}</style>
     </div>

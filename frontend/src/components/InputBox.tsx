@@ -64,6 +64,15 @@ export default function InputBox({ value, onChange, onSend, onInterrupt, isStrea
           background-color: #f7f7f8;
           -webkit-appearance: none; appearance: none;
           -webkit-tap-highlight-color: transparent;
+          /* 移除移动端聚焦时的黑色边框 */
+          -webkit-focus-ring-color: transparent;
+          box-shadow: none;
+        }
+        .input-textarea:focus {
+          outline: none !important;
+          box-shadow: none !important;
+          border: none !important;
+          -webkit-focus-ring-color: transparent !important;
         }
         .input-textarea::placeholder { color: #999; }
         .input-textarea:disabled { color: #999; }
