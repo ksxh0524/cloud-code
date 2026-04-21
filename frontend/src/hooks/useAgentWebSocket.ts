@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { HistoryMessage } from '../types'
+import type { HistoryMessage, WsServerMessage } from '../types'
 import { logger } from '../lib/logger'
 
 interface PromptData {
@@ -12,7 +12,7 @@ interface PromptData {
 
 interface UseAgentWebSocketOptions {
   workDir: string
-  onMessage: (message: any) => void
+  onMessage: (message: WsServerMessage) => void
   onError?: (error: Error) => void
   onReconnect?: () => void
 }
@@ -44,6 +44,8 @@ export function useAgentWebSocket({
   const workDirRef = useRef(workDir)
   const sdkSessionIdRef = useRef<string | null>(null)
   const onReconnectRef = useRef(onReconnect)
+  const messageQueueRef = useRef<string[]>([])
+  const MAX_QUEUE_SIZE = 10
 
   useEffect(() => { onReconnectRef.current = onReconnect }, [onReconnect])
 
@@ -93,9 +95,14 @@ export function useAgentWebSocket({
         data: { workDir: workDirRef.current },
       }))
 
-      // 如果是重连成功，触发回调
+      // 如果是重连成功，触发回调并发送排队消息
       if (wasReconnecting) {
         onReconnectRef.current?.()
+        const queued = messageQueueRef.current
+        messageQueueRef.current = []
+        for (const msg of queued) {
+          ws.send(msg)
+        }
       }
     }
 
@@ -170,20 +177,29 @@ export function useAgentWebSocket({
 
   const sendMessage = useCallback(
     (message: { type: string; data: PromptData }) => {
+      if (message.type === 'prompt' && sdkSessionIdRef.current) {
+        message.data.sdkSessionId = sdkSessionIdRef.current
+      }
+
+      const serialized = JSON.stringify(message)
+
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        // 自动注入 sdkSessionId 到 prompt 消息中
-        if (message.type === 'prompt' && sdkSessionIdRef.current) {
-          message.data.sdkSessionId = sdkSessionIdRef.current
-          logger.info('Sending prompt with SDK Session ID', { sdkSessionId: sdkSessionIdRef.current })
-        }
         logger.debug(`Sending message: ${message.type}`)
-        wsRef.current.send(JSON.stringify(message))
+        wsRef.current.send(serialized)
+      } else if (connectionState === 'reconnecting' || connectionState === 'connecting') {
+        if (messageQueueRef.current.length < MAX_QUEUE_SIZE) {
+          messageQueueRef.current.push(serialized)
+          logger.info(`Queued message (queue: ${messageQueueRef.current.length})`)
+        } else {
+          logger.error('Message queue full, dropping message')
+          onErrorRef.current?.(new Error('连接恢复中，消息队列已满'))
+        }
       } else {
         logger.error('Failed to send message: WebSocket not connected')
         onErrorRef.current?.(new Error('WebSocket is not connected'))
       }
     },
-    []
+    [connectionState]
   )
 
   useEffect(() => {

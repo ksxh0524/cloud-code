@@ -41,8 +41,11 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
 const createConversationSchema = z.object({
   /** 会话名称，1-100 字符 */
   name: z.string().min(1).max(100),
-  /** 工作目录路径 */
-  workDir: z.string().min(1),
+  /** 工作目录路径（必须是绝对路径且在允许的根目录下） */
+  workDir: z.string().min(1).refine(
+    (val) => val.startsWith('/') && isPathAllowed(val),
+    { message: 'workDir must be an absolute path within allowed directories' }
+  ),
   /** CLI 类型，默认为 'claude' */
   cliType: z.string().default('claude'),
 })
@@ -53,14 +56,19 @@ const createConversationSchema = z.object({
 const updateConversationSchema = z.object({
   /** 会话名称，1-100 字符（可选） */
   name: z.string().min(1).max(100).optional(),
+  /** SDK Session ID（可选） */
+  sdkSessionId: z.string().optional(),
 })
 
 /**
  * 更新配置请求体验证 Schema
  */
 const updateConfigSchema = z.object({
-  /** 默认工作目录路径（可选） */
-  defaultWorkDir: z.string().optional(),
+  /** 默认工作目录路径（可选，必须是绝对路径且在允许的根目录下） */
+  defaultWorkDir: z.string().optional().refine(
+    (val) => !val || (val.startsWith('/') && isPathAllowed(val)),
+    { message: 'defaultWorkDir must be an absolute path within allowed directories' }
+  ),
 })
 
 // ============================================
@@ -177,7 +185,7 @@ router.delete('/conversations/:id', asyncHandler(async (req: Request, res: Respo
 router.get('/conversations/:id/messages', asyncHandler(async (req: Request, res: Response) => {
   const conv = await getConversation(req.params.id)
   if (!conv) { res.status(404).json({ error: 'Conversation not found' }); return }
-  res.json(loadMessages(req.params.id))
+  res.json(await loadMessages(req.params.id))
 }))
 
 // ============================================
@@ -242,3 +250,7 @@ router.put('/config', asyncHandler(async (req: Request, res: Response) => {
   const config = await updateConfig(parsed.data)
   res.json(config)
 }))
+
+router.use((_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Not found' })
+})

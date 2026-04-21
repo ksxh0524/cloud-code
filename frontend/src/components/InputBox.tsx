@@ -1,4 +1,6 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
+import { matchCommands, type SlashCommand } from '../lib/commands'
+import styles from './InputBox.module.css'
 
 interface InputBoxProps {
   value: string
@@ -12,6 +14,9 @@ interface InputBoxProps {
 
 export default function InputBox({ value, onChange, onSend, onInterrupt, isStreaming, disabled, placeholder = '发送消息...' }: InputBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [commandMenuOpen, setCommandMenuOpen] = useState(false)
+  const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([])
+  const [selectedIndex, setSelectedIndex] = useState(0)
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -21,73 +26,101 @@ export default function InputBox({ value, onChange, onSend, onInterrupt, isStrea
     }
   }, [value])
 
-  const handleSend = () => { if (value.trim() && !disabled) onSend() }
+  useEffect(() => {
+    if (value.startsWith('/')) {
+      const commands = matchCommands(value.split(/\s/)[0])
+      if (commands.length > 0 && commands[0].name !== value.trim().toLowerCase()) {
+        setFilteredCommands(commands)
+        setCommandMenuOpen(true)
+        setSelectedIndex(0)
+      } else {
+        setCommandMenuOpen(false)
+      }
+    } else {
+      setCommandMenuOpen(false)
+    }
+  }, [value])
+
+  const handleSend = () => {
+    if (!value.trim() || disabled) return
+    setCommandMenuOpen(false)
+    onSend()
+  }
+
+  const selectCommand = (cmd: SlashCommand) => {
+    onChange(cmd.name + ' ')
+    setCommandMenuOpen(false)
+    textareaRef.current?.focus()
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (commandMenuOpen && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedIndex(i => (i + 1) % filteredCommands.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedIndex(i => (i - 1 + filteredCommands.length) % filteredCommands.length)
+        return
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault()
+        selectCommand(filteredCommands[selectedIndex])
+        return
+      }
+      if (e.key === 'Escape') {
+        setCommandMenuOpen(false)
+        return
+      }
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
 
   return (
-    <div className="input-box-container">
-      <div className="input-box-wrapper">
+    <div className={styles.inputBoxContainer}>
+      {commandMenuOpen && filteredCommands.length > 0 && (
+        <div className={styles.commandMenu}>
+          {filteredCommands.map((cmd, i) => (
+            <button
+              key={cmd.name}
+              className={`${styles.commandItem} ${i === selectedIndex ? styles.commandSelected : ''}`}
+              onMouseDown={e => { e.preventDefault(); selectCommand(cmd) }}
+              onMouseEnter={() => setSelectedIndex(i)}
+            >
+              <span className={styles.commandName}>{cmd.name}</span>
+              <span className={styles.commandDesc}>{cmd.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={styles.inputBoxWrapper}>
         <textarea
           ref={textareaRef}
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={isStreaming ? '生成中...' : placeholder}
           disabled={disabled || isStreaming}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-          className="input-textarea"
+          onKeyDown={handleKeyDown}
+          className={styles.inputTextarea}
           rows={1}
           style={{ WebkitAppearance: 'none', appearance: 'none' }}
         />
         {isStreaming ? (
-          <button onClick={() => onInterrupt?.()} className="send-button interrupt" title="中断生成">
+          <button onClick={() => onInterrupt?.()} className={`${styles.sendButton} ${styles.interrupt}`} title="中断生成">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
           </button>
         ) : (
-          <button onClick={handleSend} disabled={!value.trim() || disabled} className={`send-button ${value.trim() ? 'active' : ''}`}>
+          <button onClick={handleSend} disabled={!value.trim() || disabled} className={`${styles.sendButton} ${value.trim() ? styles.active : ''}`}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
         )}
       </div>
-      <style>{`
-        .input-box-container { width: 100%; }
-        .input-box-wrapper {
-          display: flex; gap: 8px; align-items: flex-end;
-          background: #f7f7f8; border-radius: 14px;
-          padding: 8px 12px; border: 1px solid #e5e5e5;
-        }
-        .input-textarea {
-          flex: 1; min-height: 44px; max-height: 120px;
-          padding: 10px 8px;
-          font-size: 16px; font-family: inherit; color: #111;
-          resize: none; overflow-y: auto; line-height: 1.5;
-          border: none; margin: 0;
-          outline: none;
-          background-color: #f7f7f8;
-          -webkit-appearance: none; appearance: none;
-          -webkit-tap-highlight-color: transparent;
-          /* 移除移动端聚焦时的黑色边框 */
-          -webkit-focus-ring-color: transparent;
-          box-shadow: none;
-        }
-        .input-textarea:focus {
-          outline: none !important;
-          box-shadow: none !important;
-          border: none !important;
-          -webkit-focus-ring-color: transparent !important;
-        }
-        .input-textarea::placeholder { color: #999; }
-        .input-textarea:disabled { color: #999; }
-        .send-button {
-          width: 40px; height: 40px; border-radius: 10px; border: none;
-          background: #e5e5e5; color: #999; cursor: not-allowed;
-          display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0; transition: all 0.2s ease;
-        }
-        .send-button.active { background: #111; color: #fff; cursor: pointer; }
-        .send-button.interrupt { background: #fef2f2; color: #dc2626; cursor: pointer; border: 1px solid #fecaca; }
-        @media (max-width: 768px) {
-          .send-button { width: 44px; height: 44px; }
-        }
-      `}</style>
     </div>
   )
 }

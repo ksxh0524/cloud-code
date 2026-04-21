@@ -34,3 +34,18 @@ export interface HistoryMessage {
 export interface AppConfig {
   defaultWorkDir: string
 }
+
+// ============================================
+// WebSocket 消息类型系统
+// ============================================
+
+export type WsServerMessage =
+  | { type: 'connected'; data: { sessionId: string }; sessionId?: string }
+  | { type: 'initialized'; data: { sessionId: string }; sessionId?: string }
+  | { type: 'message'; data: { role: string; content: string; type: string }; sessionId?: string }
+  | { type: 'stream'; data: { delta: { text: string } }; sessionId?: string }
+  | { type: 'thinking'; data: { content: string; partial?: boolean }; sessionId?: string }
+  | { type: 'tool_call'; data: { toolId?: string; toolName: string; toolInput: Record<string, unknown> }; sessionId?: string }
+  | { type: 'tool_result'; data: { toolId?: string; toolName?: string; toolOutput: string }; sessionId?: string }
+  | { type: 'done'; data: { sdkSessionId?: string } | null; sessionId?: string }
+  | { type: 'error'; data: string; sessionId?: string }

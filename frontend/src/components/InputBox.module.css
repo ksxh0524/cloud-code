@@ -1,0 +1,133 @@
+.inputBoxContainer {
+  width: 100%;
+  position: relative;
+}
+
+.commandMenu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  margin-bottom: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  z-index: var(--z-dropdown);
+}
+
+.commandItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  background: none;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--font-size-md);
+  min-height: 44px;
+}
+
+.commandSelected {
+  background: var(--color-bg-hover);
+}
+
+.commandName {
+  font-weight: 600;
+  color: var(--color-accent);
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.commandDesc {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.inputBoxWrapper {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-end;
+  background: var(--color-bg-secondary);
+  border-radius: 14px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+}
+
+.inputTextarea {
+  flex: 1;
+  min-height: var(--touch-target);
+  max-height: 120px;
+  padding: 10px var(--space-sm);
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  color: var(--color-text-primary);
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.5;
+  border: none;
+  margin: 0;
+  outline: none;
+  background-color: var(--color-bg-secondary);
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  /* 移除移动端聚焦时的黑色边框 */
+  -webkit-focus-ring-color: transparent;
+  box-shadow: none;
+}
+
+.inputTextarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+  -webkit-focus-ring-color: transparent !important;
+}
+
+.inputTextarea::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.inputTextarea:disabled {
+  color: var(--color-text-tertiary);
+}
+
+.sendButton {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: none;
+  background: var(--color-border);
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.active {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  cursor: pointer;
+}
+
+.interrupt {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  cursor: pointer;
+  border: 1px solid var(--color-error-border);
+}
+
+@media (max-width: 768px) {
+  .sendButton {
+    width: var(--touch-target);
+    height: var(--touch-target);
+  }
+}

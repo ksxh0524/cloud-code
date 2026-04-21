@@ -1,48 +1,22 @@
 import { useState, useCallback, useRef } from 'react'
 import { authFetch } from '../lib/fetch'
-import type { Message, HistoryMessage } from '../types'
+import type { Message, HistoryMessage, WsServerMessage } from '../types'
 import { logger } from '../lib/logger'
 
-// 消息 ID 计数器
 let msgCounter = 0
 
-/**
- * 生成唯一消息 ID
- * @returns 时间戳-计数器格式的 ID
- */
 function nextMsgId() {
   return `${Date.now()}-${msgCounter++}`
 }
 
-/**
- * useMessages Hook
- *
- * 管理消息列表，包括加载、添加和处理 WebSocket 消息
- * 支持多轮对话：自动维护历史消息上下文和 SDK Session ID
- *
- * @param conversationId - 当前会话 ID
- * @returns {
- *   messages: 消息列表
- *   isStreaming: 是否正在流式响应
- *   setIsStreaming: 设置流式状态
- *   addUserMessage: 添加用户消息
- *   loadMessages: 加载会话历史消息
- *   clearMessages: 清空消息
- *   handleWebSocketMessage: 处理 WebSocket 消息
- *   getHistoryForPrompt: 获取用于 prompt 的历史消息
- *   sdkSessionId: SDK Session ID
- *   setSdkSessionId: 设置 SDK Session ID
- * }
- */
 export function useMessages(_conversationId: string | null) {
   const [messages, setMessages] = useState<Message[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [sdkSessionId, setSdkSessionIdState] = useState<string | null>(null)
   const sdkSessionIdRef = useRef<string | null>(null)
+  const streamingMsgIdRef = useRef<string | null>(null)
+  const streamingContentRef = useRef<string>('')
 
-  /**
-   * 加载会话历史消息
-   */
   const loadMessages = useCallback(async (id: string) => {
     try {
       const res = await authFetch(`/api/conversations/${id}/messages`)
@@ -58,27 +32,19 @@ export function useMessages(_conversationId: string | null) {
     }
   }, [])
 
-  /**
-   * 清空消息列表
-   */
   const clearMessages = useCallback(() => {
     setMessages([])
     sdkSessionIdRef.current = null
     setSdkSessionIdState(null)
+    streamingMsgIdRef.current = null
+    streamingContentRef.current = ''
   }, [])
 
-  /**
-   * 设置 SDK Session ID（同时更新 ref 和 state）
-   */
   const setSdkSessionId = useCallback((id: string | null) => {
     sdkSessionIdRef.current = id
     setSdkSessionIdState(id)
   }, [])
 
-  /**
-   * 获取用于 prompt 的历史消息
-   * 过滤出 user 和 assistant 的文本消息作为对话上下文
-   */
   const getHistoryForPrompt = useCallback((): HistoryMessage[] => {
     return messages
       .filter((msg): msg is Message & { role: 'user' | 'assistant'; type: 'text' } =>
@@ -93,12 +59,6 @@ export function useMessages(_conversationId: string | null) {
       }))
   }, [messages])
 
-  /**
-   * 添加用户消息
-   *
-   * @param content - 消息内容
-   * @returns 添加的消息对象
-   */
   const addUserMessage = useCallback((content: string): Message => {
     const msg: Message = {
       id: nextMsgId(),
@@ -111,52 +71,86 @@ export function useMessages(_conversationId: string | null) {
     return msg
   }, [])
 
-  /**
-   * 处理 WebSocket 消息
-   * 根据消息类型更新消息列表
-   *
-   * @param msg - WebSocket 消息对象
-   * @param sessionId - 当前会话 ID
-   * @returns 是否处理了此消息
-   */
-  const handleWebSocketMessage = useCallback((msg: any, sessionId: string | null): boolean => {
-    // 验证会话 ID
+  const addSystemMessage = useCallback((content: string): void => {
+    setMessages(prev => [...prev, {
+      id: nextMsgId(),
+      role: 'system',
+      content,
+      type: 'text',
+      timestamp: Date.now(),
+    }])
+  }, [])
+
+  const handleWebSocketMessage = useCallback((msg: WsServerMessage, sessionId: string | null): boolean => {
     if (msg.sessionId && sessionId && msg.sessionId !== sessionId) {
       return false
     }
 
     switch (msg.type) {
-      case 'message': {
-        setMessages(prev => [
-          ...prev,
-          {
-            id: nextMsgId(),
-            role: msg.data.role,
-            content: msg.data.content,
-            type: msg.data.type,
-            timestamp: Date.now(),
-          },
-        ])
+      case 'stream': {
+        const text = msg.data.delta?.text || ''
+        streamingContentRef.current += text
+
+        if (!streamingMsgIdRef.current) {
+          const id = nextMsgId()
+          streamingMsgIdRef.current = id
+          setMessages(prev => [
+            ...prev,
+            { id, role: 'assistant', content: streamingContentRef.current, type: 'text', timestamp: Date.now() },
+          ])
+        } else {
+          const streamingId = streamingMsgIdRef.current
+          setMessages(prev => {
+            const idx = prev.findIndex(m => m.id === streamingId)
+            if (idx !== -1) {
+              const updated = [...prev]
+              updated[idx] = { ...updated[idx], content: streamingContentRef.current }
+              return updated
+            }
+            return prev
+          })
+        }
         break
       }
 
-      case 'stream': {
-        setMessages(prev => {
-          const lastMsg = prev[prev.length - 1]
-          if (lastMsg && lastMsg.role === 'assistant' && lastMsg.type === 'text') {
-            const updated = [...prev]
-            updated[updated.length - 1] = {
-              ...lastMsg,
-              content: lastMsg.content + (msg.data.delta?.text || ''),
+      case 'message': {
+        // 完整消息到达时，替换流式内容
+        if (streamingMsgIdRef.current) {
+          const streamingId = streamingMsgIdRef.current
+          streamingMsgIdRef.current = null
+          streamingContentRef.current = ''
+          setMessages(prev => {
+            const idx = prev.findIndex(m => m.id === streamingId)
+            if (idx !== -1) {
+              const updated = [...prev]
+              updated[idx] = {
+                ...updated[idx],
+                role: msg.data.role as Message['role'],
+                content: msg.data.content,
+                type: msg.data.type as Message['type'],
+              }
+              return updated
             }
-            return updated
-          }
-          return prev
-        })
+            return prev
+          })
+        } else {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: nextMsgId(),
+              role: msg.data.role as Message['role'],
+              content: msg.data.content,
+              type: msg.data.type as Message['type'],
+              timestamp: Date.now(),
+            },
+          ])
+        }
         break
       }
 
       case 'thinking': {
+        streamingMsgIdRef.current = null
+        streamingContentRef.current = ''
         setMessages(prev => [
           ...prev,
           {
@@ -171,6 +165,8 @@ export function useMessages(_conversationId: string | null) {
       }
 
       case 'tool_call': {
+        streamingMsgIdRef.current = null
+        streamingContentRef.current = ''
         setMessages(prev => [
           ...prev,
           {
@@ -219,11 +215,15 @@ export function useMessages(_conversationId: string | null) {
       }
 
       case 'done': {
+        streamingMsgIdRef.current = null
+        streamingContentRef.current = ''
         setIsStreaming(false)
         break
       }
 
       case 'error': {
+        streamingMsgIdRef.current = null
+        streamingContentRef.current = ''
         setMessages(prev => [
           ...prev,
           {
@@ -250,6 +250,7 @@ export function useMessages(_conversationId: string | null) {
     isStreaming,
     setIsStreaming,
     addUserMessage,
+    addSystemMessage,
     loadMessages,
     clearMessages,
     handleWebSocketMessage,

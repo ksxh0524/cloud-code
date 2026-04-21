@@ -7,6 +7,8 @@ import { useAutoScroll } from '../hooks/useAutoScroll'
 import { toast } from '../components/Toast'
 import { logger } from '../lib/logger'
 import { LogViewer } from '../components/LogViewer'
+import { parseSlashCommand } from '../lib/commands'
+import type { WsServerMessage } from '../types'
 
 export default function ChatNew() {
   const [conversationId, setConversationId] = useState<string | null>(null)
@@ -23,6 +25,7 @@ export default function ChatNew() {
     isStreaming,
     setIsStreaming,
     addUserMessage,
+    addSystemMessage,
     loadMessages,
     clearMessages,
     handleWebSocketMessage,
@@ -39,7 +42,7 @@ export default function ChatNew() {
     setMessageSdkSessionId(id)
   }, [setMessageSdkSessionId])
 
-  const handleIncomingMessage = useCallback((msg: any) => {
+  const handleIncomingMessage = useCallback((msg: WsServerMessage) => {
     // 捕获 done 消息中的 SDK Session ID
     if (msg.type === 'done' && msg.data?.sdkSessionId) {
       handleSdkSessionIdChange(msg.data.sdkSessionId)
@@ -103,6 +106,83 @@ export default function ChatNew() {
   const handleSendMessage = () => {
     if (!inputValue.trim() || isStreaming || !currentConversation) return
 
+    // 拦截斜杠命令
+    const parsed = parseSlashCommand(inputValue)
+    if (parsed) {
+      logger.userAction('slash_command', { command: parsed.command, args: parsed.args })
+
+      switch (parsed.command) {
+        case '/clear':
+          clearMessages()
+          setSdkSessionId(null)
+          setMessageSdkSessionId(null)
+          toast.success('对话已清空')
+          break
+        case '/compact':
+          if (messageSdkSessionId) {
+            sendMessage({
+              type: 'prompt',
+              data: {
+                prompt: '/compact',
+                workDir: currentConversation.workDir,
+                ...(conversationId ? { conversationId } : {}),
+              },
+            })
+            setIsStreaming(true)
+          } else {
+            toast.info('当前无可压缩的会话上下文')
+          }
+          break
+        case '/help': {
+          const helpText = [
+            '可用命令：',
+            '/clear - 清空当前对话消息',
+            '/compact - 压缩对话历史以节省 token',
+            '/help - 显示此帮助信息',
+            '/model - 查看当前模型信息',
+            '/cost - 查看 token 使用量',
+            '/status - 查看连接和会话状态',
+            '',
+            '提示：输入 / 开头可查看命令自动补全',
+          ].join('\n')
+          addUserMessage('/help')
+          addSystemMessage(helpText)
+          break
+        }
+        case '/model':
+          sendMessage({
+            type: 'prompt',
+            data: {
+              prompt: 'What model are you? Respond with just your model name and version.',
+              workDir: currentConversation.workDir,
+              ...(conversationId ? { conversationId } : {}),
+            },
+          })
+          setIsStreaming(true)
+          break
+        case '/cost':
+          toast.info('Token 使用统计功能即将推出')
+          break
+        case '/status': {
+          const statusText = [
+            `连接状态: ${isConnected ? '已连接' : connectionState}`,
+            `会话 ID: ${sessionIdRef.current || '无'}`,
+            `SDK 会话: ${messageSdkSessionId ? '活跃' : '无'}`,
+            `对话 ID: ${conversationId || '无'}`,
+            `消息数: ${messages.length}`,
+            `工作目录: ${currentConversation.workDir}`,
+          ].join('\n')
+          addUserMessage('/status')
+          addSystemMessage(statusText)
+          break
+        }
+        default:
+          toast.info(`未知命令: ${parsed.command}，输入 /help 查看可用命令`)
+      }
+      setInputValue('')
+      return
+    }
+
     // 记录用户操作日志
     logger.userAction('send_message', {
       conversationId,
@@ -129,8 +209,7 @@ export default function ChatNew() {
         prompt: inputValue,
         workDir: currentConversation.workDir,
         ...(conversationId ? { conversationId } : {}),
-        // 传递历史消息以支持多轮对话
-        history: history.slice(-20), // 限制历史消息数量避免超出 token 限制
+        history: history.slice(-20),
       },
     })
   }
@@ -147,7 +226,6 @@ export default function ChatNew() {
       setConversationId(conv.id)
       setShowSidebar(false)
       clearMessages()
-      // 重置 SDK Session ID
       setSdkSessionId(null)
       setMessageSdkSessionId(null)
       logger.info('Conversation created', { conversationId: conv.id, workDir })
@@ -156,11 +234,12 @@ export default function ChatNew() {
 
   const handleSelectConversation = async (id: string) => {
     logger.userAction('select_conversation', { conversationId: id })
+    const target = conversations.find(c => c.id === id)
     setConversationId(id)
     setShowSidebar(false)
-    // 切换会话时重置 SDK Session ID
-    setSdkSessionId(null)
-    setMessageSdkSessionId(null)
+    // 从持久化的 Conversation 恢复 SDK Session ID
+    setSdkSessionId(target?.sdkSessionId || null)
+    setMessageSdkSessionId(target?.sdkSessionId || null)
     await loadMessages(id)
     logger.info('Messages loaded', { conversationId: id, messageCount: messages.length })
   }
@@ -181,18 +260,23 @@ export default function ChatNew() {
     await updateConversation(id, newName)
   }
 
+  const handleToggleSidebar = useCallback(() => setShowSidebar(s => !s), [])
+  const handleToggleNewModal = useCallback(() => setShowNewModal(s => !s), [])
+  const handleOpenLogViewer = useCallback(() => setShowLogViewer(true), [])
+  const handleCloseLogViewer = useCallback(() => setShowLogViewer(false), [])
+
   return (
     <>
       <ChatLayout
         showSidebar={showSidebar}
-        onToggleSidebar={() => setShowSidebar(s => !s)}
+        onToggleSidebar={handleToggleSidebar}
         conversations={conversations}
         currentConversation={currentConversation}
         onSelectConversation={handleSelectConversation}
         onDeleteConversation={handleDeleteConversation}
         onRenameConversation={handleRenameConversation}
         showNewModal={showNewModal}
-        onToggleNewModal={() => setShowNewModal(s => !s)}
+        onToggleNewModal={handleToggleNewModal}
         onCreateConversation={handleCreateConversation}
         messages={messages}
         messagesEndRef={scrollRef}
@@ -204,12 +288,12 @@ export default function ChatNew() {
         onSendMessage={handleSendMessage}
         isStreaming={isStreaming}
         onInterrupt={handleInterrupt}
-        onOpenLogViewer={() => setShowLogViewer(true)}
+        onOpenLogViewer={handleOpenLogViewer}
       />
 
       <LogViewer
         isOpen={showLogViewer}
-        onClose={() => setShowLogViewer(false)}
+        onClose={handleCloseLogViewer}
       />
     </>
   )

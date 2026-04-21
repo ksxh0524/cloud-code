@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
+import styles from './Modal.module.css'
 
 interface ModalProps {
   open: boolean
@@ -7,7 +8,17 @@ interface ModalProps {
   children: React.ReactNode
 }
 
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 export default function Modal({ open, onClose, title, children }: ModalProps) {
+  const contentRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  const getFocusableElements = useCallback(() => {
+    if (!contentRef.current) return []
+    return Array.from(contentRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+  }, [])
+
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden'
     else document.body.style.overflow = ''
@@ -21,28 +32,65 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])
 
+  // Save previous focus on open, restore on close
+  useEffect(() => {
+    if (open) {
+      previousFocusRef.current = document.activeElement as HTMLElement
+      // Focus the first focusable element inside the modal after render
+      requestAnimationFrame(() => {
+        const focusable = getFocusableElements()
+        if (focusable.length > 0) {
+          focusable[0].focus()
+        } else if (contentRef.current) {
+          contentRef.current.focus()
+        }
+      })
+    } else if (previousFocusRef.current) {
+      previousFocusRef.current.focus()
+      previousFocusRef.current = null
+    }
+  }, [open, getFocusableElements])
+
+  // Focus trap: keep Tab/Shift+Tab cycling within the modal
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab') return
+    const focusable = getFocusableElements()
+    if (focusable.length === 0) {
+      e.preventDefault()
+      return
+    }
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+  }, [getFocusableElements])
+
   if (!open) return null
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="presentation">
-      <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={(e) => e.stopPropagation()}>
-        {title && <div className="modal-header" id="modal-title">{title}</div>}
-        <div className="modal-body">{children}</div>
-        <button className="modal-close" onClick={onClose} aria-label="关闭">✕</button>
+    <div className={styles.overlay} onClick={onClose} role="presentation">
+      <div
+        className={styles.content}
+        ref={contentRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
+      >
+        {title && <div className={styles.header} id="modal-title">{title}</div>}
+        <div className={styles.body}>{children}</div>
+        <button className={styles.close} onClick={onClose} aria-label="关闭">✕</button>
       </div>
-      <style>{`
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); display: flex; align-items: flex-start; justify-content: center; z-index: 9999; padding: 16px; padding-top: calc(16px + env(safe-area-inset-top)); overflow-y: auto; }
-        .modal-content { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 24px; min-width: 320px; max-width: 90vw; max-height: calc(90vh - 32px - env(safe-area-inset-top)); overflow-y: auto; position: relative; margin: auto 0; }
-        .modal-header { font-size: 18px; font-weight: 600; color: #111; margin-bottom: 16px; padding-right: 30px; }
-        .modal-body { color: #111; }
-        .modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 20px; color: #999; cursor: pointer; padding: 8px; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; z-index: 1; }
-        .modal-close:hover { color: #111; }
-        @media (max-width: 768px) {
-          .modal-overlay { padding: 8px; padding-top: calc(8px + env(safe-area-inset-top)); align-items: flex-start; }
-          .modal-content { min-width: auto; width: 100%; max-width: 100%; max-height: calc(100vh - 16px - env(safe-area-inset-top)); padding: 16px; margin: 0; border-radius: 12px; }
-          .modal-header { font-size: 16px; margin-bottom: 12px; padding-right: 40px; }
-        }
-      `}</style>
     </div>
   )
 }

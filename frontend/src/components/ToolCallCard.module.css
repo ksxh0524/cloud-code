@@ -1,0 +1,178 @@
+.toolCard {
+  margin: var(--space-xs) 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  background: var(--color-bg-tertiary);
+}
+
+.toolCardHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  text-align: left;
+  border-radius: var(--radius-md);
+  transition: background 0.15s;
+  min-height: 42px;
+}
+
+.toolCardHeader:hover {
+  background: var(--color-border-light);
+}
+
+.toolCardArrow {
+  font-size: 10px;
+  color: #aaa;
+  flex-shrink: 0;
+}
+
+.toolCardName {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.toolCardFile {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  font-family: 'SFMono-Regular', 'Menlo', monospace;
+  background: #e8e8e8;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-xs);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolCardStatus {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.toolCardBody {
+  padding: 0 10px 10px;
+  font-size: var(--font-size-sm);
+}
+
+.toolDiff {
+  margin-bottom: var(--space-sm);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.diffSection {
+  margin-bottom: 2px;
+}
+
+.diffLabel {
+  display: inline-block;
+  width: 24px;
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+  user-select: none;
+  color: var(--color-text-tertiary);
+}
+
+.diffOld {
+  display: block;
+  margin: 0;
+  background: var(--color-error-bg);
+  color: var(--color-diff-old-text);
+  padding: var(--space-sm) 10px;
+  border-radius: var(--radius-sm);
+  font-family: 'SFMono-Regular', 'Menlo', monospace;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-left: 3px solid var(--color-diff-old);
+}
+
+.diffNew {
+  display: block;
+  margin: 0;
+  background: var(--color-success-bg);
+  color: var(--color-diff-new-text);
+  padding: var(--space-sm) 10px;
+  border-radius: var(--radius-sm);
+  font-family: 'SFMono-Regular', 'Menlo', monospace;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-left: 3px solid var(--color-success-border);
+}
+
+.toolInputs {
+  margin-bottom: 6px;
+}
+
+.toolInputItem {
+  margin-bottom: var(--space-xs);
+}
+
+.toolInputKey {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-right: 6px;
+}
+
+.toolInputVal {
+  margin: 2px 0 0;
+  font-size: var(--font-size-xs);
+  font-family: 'SFMono-Regular', 'Menlo', monospace;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.toolOutput {
+  border-top: 1px solid #eee;
+  padding-top: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.toolOutputLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+
+.toolOutputText {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-family: 'SFMono-Regular', 'Menlo', monospace;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--color-bg);
+  padding: var(--space-sm) 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #eee;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .toolCardHeader {
+    padding: 10px var(--space-md);
+    font-size: var(--font-size-base);
+    min-height: var(--touch-target);
+  }
+  .toolCardFile {
+    max-width: 100px;
+  }
+}

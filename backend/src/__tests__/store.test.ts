@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
-import { mkdir, rm, readFile, writeFile, copyFile } from 'fs/promises'
+import { mkdir, rm, copyFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
@@ -26,7 +26,6 @@ const BACKUP_FILE = join(homedir(), '.cloud-code-test', 'data-backup.json')
 
 describe('Store Module', () => {
   beforeAll(async () => {
-    // Backup real data file if it exists
     if (existsSync(REAL_DATA_FILE)) {
       await mkdir(join(homedir(), '.cloud-code-test'), { recursive: true })
       await copyFile(REAL_DATA_FILE, BACKUP_FILE)
@@ -34,14 +33,12 @@ describe('Store Module', () => {
   })
 
   beforeEach(async () => {
-    // Clear real data file before each test for isolation
     if (existsSync(REAL_DATA_FILE)) {
       await rm(REAL_DATA_FILE, { force: true })
     }
   })
 
   afterAll(async () => {
-    // Restore real data file
     if (existsSync(BACKUP_FILE)) {
       await copyFile(BACKUP_FILE, REAL_DATA_FILE)
       await rm(BACKUP_FILE, { force: true })
@@ -52,32 +49,32 @@ describe('Store Module', () => {
     it('should create a conversation', async () => {
       const conv = await createConversation({
         name: 'Test Conversation',
-        workDir: '/tmp/test',
+        workDir: homedir(),
       })
 
       expect(conv).toBeDefined()
       expect(conv.id).toBeTruthy()
       expect(conv.name).toBe('Test Conversation')
-      expect(conv.workDir).toBe('/tmp/test')
+      expect(conv.workDir).toBe(homedir())
       expect(conv.cliType).toBe('claude')
       expect(conv.createdAt).toBeTruthy()
       expect(conv.updatedAt).toBeTruthy()
     })
 
     it('should list conversations sorted by updatedAt', async () => {
-      const conv1 = await createConversation({ name: 'First', workDir: '/tmp/1' })
+      const conv1 = await createConversation({ name: 'First', workDir: homedir() })
       await new Promise(r => setTimeout(r, 10))
-      const conv2 = await createConversation({ name: 'Second', workDir: '/tmp/2' })
+      const conv2 = await createConversation({ name: 'Second', workDir: homedir() })
 
       const list = await listConversations()
 
       expect(list).toHaveLength(2)
-      expect(list[0].id).toBe(conv2.id) // Most recent first
+      expect(list[0].id).toBe(conv2.id)
       expect(list[1].id).toBe(conv1.id)
     })
 
     it('should get a conversation by id', async () => {
-      const conv = await createConversation({ name: 'Test', workDir: '/tmp' })
+      const conv = await createConversation({ name: 'Test', workDir: homedir() })
       const found = await getConversation(conv.id)
 
       expect(found).toBeDefined()
@@ -91,14 +88,13 @@ describe('Store Module', () => {
     })
 
     it('should update a conversation', async () => {
-      const conv = await createConversation({ name: 'Original', workDir: '/tmp' })
+      const conv = await createConversation({ name: 'Original', workDir: homedir() })
       const updated = await updateConversation(conv.id, { name: 'Updated' })
 
       expect(updated).toBeDefined()
       expect(updated?.name).toBe('Updated')
       expect(updated?.id).toBe(conv.id)
 
-      // Verify it was saved
       const found = await getConversation(conv.id)
       expect(found?.name).toBe('Updated')
     })
@@ -109,7 +105,7 @@ describe('Store Module', () => {
     })
 
     it('should delete a conversation', async () => {
-      const conv = await createConversation({ name: 'To Delete', workDir: '/tmp' })
+      const conv = await createConversation({ name: 'To Delete', workDir: homedir() })
       const deleted = await deleteConversation(conv.id)
 
       expect(deleted).toBe(true)
@@ -124,22 +120,18 @@ describe('Store Module', () => {
     })
 
     it('should delete associated messages when deleting conversation', async () => {
-      const conv = await createConversation({ name: 'Test', workDir: '/tmp' })
+      const conv = await createConversation({ name: 'Test', workDir: homedir() })
 
-      // Save some messages
       await saveMessages(conv.id, [
         { id: '1', role: 'user', content: 'Hello', type: 'text', timestamp: Date.now() },
       ])
 
-      // Verify messages exist
-      const messagesBefore = loadMessages(conv.id)
+      const messagesBefore = await loadMessages(conv.id)
       expect(messagesBefore).toHaveLength(1)
 
-      // Delete conversation
       await deleteConversation(conv.id)
 
-      // Verify messages are deleted
-      const messagesAfter = loadMessages(conv.id)
+      const messagesAfter = await loadMessages(conv.id)
       expect(messagesAfter).toHaveLength(0)
     })
   })
@@ -153,7 +145,7 @@ describe('Store Module', () => {
     })
 
     it('should update config', async () => {
-      const newDir = '/custom/workdir'
+      const newDir = join(homedir(), 'custom-workdir')
       await updateConfig({ defaultWorkDir: newDir })
 
       const config = await getConfig()
@@ -161,11 +153,10 @@ describe('Store Module', () => {
     })
 
     it('should merge partial updates', async () => {
-      const original = await getConfig()
-      await updateConfig({ defaultWorkDir: '/another/dir' })
+      await updateConfig({ defaultWorkDir: join(homedir(), 'another') })
 
       const updated = await getConfig()
-      expect(updated.defaultWorkDir).toBe('/another/dir')
+      expect(updated.defaultWorkDir).toBe(join(homedir(), 'another'))
     })
   })
 
@@ -178,7 +169,6 @@ describe('Store Module', () => {
     it('should get sub directories for allowed path', async () => {
       const testDir = join(homedir(), 'codes')
 
-      // Only test if the directory exists
       try {
         const subs = await getSubDirectories(testDir)
         expect(Array.isArray(subs)).toBe(true)
@@ -227,27 +217,27 @@ describe('Store Module', () => {
 
   describe('Messages', () => {
     it('should save and load messages', async () => {
-      const conversationId = 'test-conv-1'
+      const conversationId = crypto.randomUUID()
       const messages = [
         { id: '1', role: 'user', content: 'Hello', type: 'text', timestamp: Date.now() },
         { id: '2', role: 'assistant', content: 'Hi there!', type: 'text', timestamp: Date.now() },
       ]
 
       await saveMessages(conversationId, messages)
-      const loaded = loadMessages(conversationId)
+      const loaded = await loadMessages(conversationId)
 
       expect(loaded).toHaveLength(2)
       expect(loaded[0].content).toBe('Hello')
       expect(loaded[1].content).toBe('Hi there!')
     })
 
-    it('should return empty array for non-existent conversation', () => {
-      const loaded = loadMessages('non-existent-conv')
+    it('should return empty array for non-existent conversation', async () => {
+      const loaded = await loadMessages(crypto.randomUUID())
       expect(loaded).toEqual([])
     })
 
     it('should overwrite existing messages', async () => {
-      const conversationId = 'test-conv-2'
+      const conversationId = crypto.randomUUID()
 
       await saveMessages(conversationId, [
         { id: '1', role: 'user', content: 'First', type: 'text', timestamp: Date.now() },
@@ -257,13 +247,13 @@ describe('Store Module', () => {
         { id: '2', role: 'user', content: 'Second', type: 'text', timestamp: Date.now() },
       ])
 
-      const loaded = loadMessages(conversationId)
+      const loaded = await loadMessages(conversationId)
       expect(loaded).toHaveLength(1)
       expect(loaded[0].content).toBe('Second')
     })
 
     it('should handle messages with metadata', async () => {
-      const conversationId = 'test-conv-3'
+      const conversationId = crypto.randomUUID()
       const messages = [
         {
           id: '1',
@@ -276,28 +266,33 @@ describe('Store Module', () => {
       ]
 
       await saveMessages(conversationId, messages)
-      const loaded = loadMessages(conversationId)
+      const loaded = await loadMessages(conversationId)
 
       expect(loaded[0].metadata).toBeDefined()
       expect(loaded[0].metadata?.toolName).toBe('Bash')
     })
 
     it('should delete messages', async () => {
-      const conversationId = 'test-conv-4'
+      const conversationId = crypto.randomUUID()
 
       await saveMessages(conversationId, [
         { id: '1', role: 'user', content: 'Hello', type: 'text', timestamp: Date.now() },
       ])
 
-      deleteMessages(conversationId)
+      await deleteMessages(conversationId)
 
-      const loaded = loadMessages(conversationId)
+      const loaded = await loadMessages(conversationId)
       expect(loaded).toEqual([])
     })
 
-    it('should handle delete for non-existent messages', () => {
-      // Should not throw
-      expect(() => deleteMessages('non-existent')).not.toThrow()
+    it('should handle delete for non-existent messages', async () => {
+      await expect(deleteMessages(crypto.randomUUID())).resolves.toBeUndefined()
+    })
+
+    it('should reject invalid conversation IDs', async () => {
+      await expect(saveMessages('../../etc/passwd', [])).rejects.toThrow('Invalid conversation ID')
+      await expect(loadMessages('../hack')).rejects.toThrow('Invalid conversation ID')
+      await expect(deleteMessages('not-a-uuid')).rejects.toThrow('Invalid conversation ID')
     })
   })
 })

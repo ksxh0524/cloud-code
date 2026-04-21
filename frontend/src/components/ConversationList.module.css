@@ -1,0 +1,306 @@
+.conversationList {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Search */
+.convSearch {
+  padding: var(--space-sm) var(--space-md);
+}
+
+.convSearchInput {
+  width: 100%;
+  padding: 10px var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  font-size: var(--font-size-md);
+  outline: none;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  min-height: 42px;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.convSearchInput:focus {
+  border-color: var(--color-text-tertiary);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+
+.convSearchInput::placeholder {
+  color: var(--color-text-quaternary);
+}
+
+/* Items */
+.convItems {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--space-sm) var(--space-sm);
+}
+
+.convEmpty {
+  padding: 40px var(--space-lg);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.convItem {
+  display: flex;
+  align-items: center;
+  padding: var(--space-md);
+  cursor: pointer;
+  border-radius: var(--radius-xl);
+  margin-bottom: 2px;
+  position: relative;
+  transition: background 0.15s;
+}
+
+.convItem:hover {
+  background: #f0f0f0;
+}
+
+.active {
+  background: #e8e8e8;
+}
+
+/* Info */
+.convInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.convName {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.convMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: 3px;
+}
+
+.convPath {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.convDot {
+  font-size: 10px;
+  color: #ccc;
+}
+
+.convTime {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-quaternary);
+}
+
+/* Menu button */
+.convMenu {
+  background: none;
+  border: none;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 6px;
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  border-radius: var(--radius-md);
+}
+
+.convItem:hover .convMenu {
+  opacity: 1;
+}
+
+.convMenu:hover {
+  background: #e0e0e0;
+}
+
+@media (max-width: 768px) {
+  .convMenu {
+    opacity: 1;
+    min-width: var(--touch-target);
+    min-height: var(--touch-target);
+  }
+}
+
+/* Context menu */
+.convActions {
+  position: absolute;
+  top: 100%;
+  right: var(--space-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+  min-width: 130px;
+  overflow: hidden;
+}
+
+.convAction {
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background 0.15s;
+  min-height: var(--touch-target);
+  display: flex;
+  align-items: center;
+}
+
+.convAction:hover {
+  background: var(--color-bg-secondary);
+}
+
+.delete {
+  color: var(--color-error);
+}
+
+.delete:hover {
+  background: var(--color-error-bg);
+}
+
+/* Edit mode */
+.convEdit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.convEditInput {
+  flex: 1;
+  padding: var(--space-sm) 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  outline: none;
+  min-height: 40px;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.convEditInput:focus {
+  border-color: var(--color-text-tertiary);
+}
+
+.convEditSave {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  border: none;
+  border-radius: var(--radius-md);
+  min-width: 40px;
+  min-height: 40px;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Delete modal */
+.convDeleteOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  padding: var(--space-lg);
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.convDeleteDialog {
+  background: var(--color-bg);
+  border-radius: var(--radius-xl);
+  padding: var(--space-2xl);
+  min-width: 300px;
+  max-width: 90vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15);
+  animation: dialogIn 0.2s ease-out;
+}
+
+@keyframes dialogIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.convDeleteHeader {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.convDeleteBody p {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.convDeleteActions {
+  display: flex;
+  gap: 10px;
+  margin-top: var(--space-xl);
+}
+
+.convDeleteActions .convDeleteBtn {
+  flex: 1;
+}
+
+.convDeleteBtn {
+  padding: var(--space-md) var(--space-xl);
+  border-radius: var(--radius-xl);
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  cursor: pointer;
+  min-height: 46px;
+  transition: all 0.15s;
+}
+
+.cancel {
+  background: #f5f5f5;
+  border: none;
+  color: #555;
+}
+
+.cancel:hover {
+  background: #eee;
+}
+
+.confirm {
+  background: var(--color-error);
+  border: none;
+  color: var(--color-bg);
+}
+
+.confirm:hover {
+  background: #b91c1c;
+}

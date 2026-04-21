@@ -1,7 +1,32 @@
 import { useState } from 'react'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { logger } from '../lib/logger'
+import styles from './CodeBlock.module.css'
+
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
+import css from 'react-syntax-highlighter/dist/esm/languages/prism/css'
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown'
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python'
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
+import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx'
+import diff from 'react-syntax-highlighter/dist/esm/languages/prism/diff'
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
+
+SyntaxHighlighter.registerLanguage('bash', bash)
+SyntaxHighlighter.registerLanguage('css', css)
+SyntaxHighlighter.registerLanguage('json', json)
+SyntaxHighlighter.registerLanguage('markdown', markdown)
+SyntaxHighlighter.registerLanguage('python', python)
+SyntaxHighlighter.registerLanguage('typescript', typescript)
+SyntaxHighlighter.registerLanguage('javascript', typescript)
+SyntaxHighlighter.registerLanguage('jsx', jsx)
+SyntaxHighlighter.registerLanguage('tsx', jsx)
+SyntaxHighlighter.registerLanguage('diff', diff)
+SyntaxHighlighter.registerLanguage('sql', sql)
+SyntaxHighlighter.registerLanguage('yaml', yaml)
 
 interface CodeBlockProps {
   code: string
@@ -18,24 +43,15 @@ export default function CodeBlock({ code, language = 'text' }: CodeBlockProps) {
       setTimeout(() => setCopied(false), 2000)
       logger.userAction('copy_code', { language, codeLength: code.length })
     } catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = code
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      // Clipboard API 不可用时的静默处理
     }
   }
 
   return (
-    <div className="code-block">
-      <div className="code-block-header">
-        <span className="code-block-lang">{language}</span>
-        <button className="code-block-copy" onClick={handleCopy}>
+    <div className={styles.codeBlock}>
+      <div className={styles.codeBlockHeader}>
+        <span className={styles.codeBlockLang}>{language}</span>
+        <button className={styles.codeBlockCopy} onClick={handleCopy}>
           {copied ? '✓ 已复制' : '复制'}
         </button>
       </div>
@@ -47,44 +63,6 @@ export default function CodeBlock({ code, language = 'text' }: CodeBlockProps) {
       }}>
         {code}
       </SyntaxHighlighter>
-
-      <style>{`
-        .code-block {
-          border-radius: 6px;
-          overflow: hidden;
-          margin: 8px 0;
-          border: 1px solid #e5e5e5;
-        }
-
-        .code-block-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 6px 12px;
-          background: #2d2d2d;
-          font-size: 12px;
-        }
-
-        .code-block-lang {
-          color: #8e8ea0;
-          text-transform: uppercase;
-        }
-
-        .code-block-copy {
-          background: none;
-          border: none;
-          color: #8e8ea0;
-          cursor: pointer;
-          font-size: 12px;
-          padding: 2px 6px;
-          min-height: unset;
-          min-width: unset;
-        }
-
-        .code-block-copy:hover {
-          color: #ffffff;
-        }
-      `}</style>
     </div>
   )
 }

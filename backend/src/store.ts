@@ -1,5 +1,4 @@
-import { existsSync, readFileSync, unlinkSync } from 'fs'
-import { writeFile, mkdir, readdir, stat, rename, readFile as readFileAsync } from 'fs/promises'
+import { stat, unlink, writeFile, mkdir, readdir, rename, readFile as readFileAsync } from 'fs/promises'
 import { resolve, basename, join } from 'path'
 import { homedir } from 'os'
 import { logger } from './logger.js'
@@ -39,6 +38,8 @@ interface Conversation {
   createdAt: string
   /** 最后更新时间 (ISO 8601 格式) */
   updatedAt: string
+  /** SDK Session ID（用于恢复会话） */
+  sdkSessionId?: string
 }
 
 /**
@@ -110,10 +111,11 @@ function releaseLock(): void {
  * @returns Promise<StoreData>
  */
 async function loadData(): Promise<StoreData> {
-  if (existsSync(DATA_FILE)) {
-    try {
-      return JSON.parse(await readFileAsync(DATA_FILE, 'utf-8'))
-    } catch (err) {
+  try {
+    const content = await readFileAsync(DATA_FILE, 'utf-8')
+    return JSON.parse(content)
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') {
       logger.error({ err, file: DATA_FILE }, 'Failed to parse data file, resetting to defaults')
     }
   }
@@ -224,7 +226,7 @@ export async function createConversation(data: {
  */
 export async function updateConversation(
   id: string,
-  updates: Partial<Pick<Conversation, 'name'>>
+  updates: Partial<Pick<Conversation, 'name' | 'sdkSessionId'>>
 ): Promise<Conversation | null> {
   return withLock(store => {
     const idx = store.conversations.findIndex(c => c.id === id)
@@ -232,6 +234,19 @@ export async function updateConversation(
     store.conversations[idx] = { ...store.conversations[idx], ...updates, updatedAt: new Date().toISOString() }
     logger.info({ convId: id }, 'Conversation updated')
     return { result: store.conversations[idx], store }
+  })
+}
+
+/**
+ * 更新会话的最后活动时间（不修改其他字段）
+ */
+export async function touchConversation(id: string): Promise<void> {
+  await withLock(store => {
+    const idx = store.conversations.findIndex(c => c.id === id)
+    if (idx !== -1) {
+      store.conversations[idx].updatedAt = new Date().toISOString()
+    }
+    return { result: undefined, store }
   })
 }
 
@@ -248,7 +263,7 @@ export async function deleteConversation(id: string): Promise<boolean> {
     store.conversations = store.conversations.filter(c => c.id !== id)
     const deleted = store.conversations.length < before
     if (deleted) {
-      deleteMessages(id)
+      void deleteMessages(id)
       logger.info({ convId: id }, 'Conversation deleted')
     }
     return { result: deleted, store }
@@ -299,9 +314,8 @@ export async function getWorkDirs(): Promise<{ path: string; name: string; isCon
   const defaultDir = config.defaultWorkDir
   const dirs: { path: string; name: string; isConfig: boolean }[] = []
 
-  if (existsSync(defaultDir)) {
-    try {
-      const s = await stat(defaultDir)
+  try {
+    const s = await stat(defaultDir)
       if (s.isDirectory()) {
         dirs.push({ path: defaultDir, name: basename(defaultDir), isConfig: true })
         const entries = await readdir(defaultDir, { withFileTypes: true })
@@ -311,10 +325,8 @@ export async function getWorkDirs(): Promise<{ path: string; name: string; isCon
         dirs.push(...subs)
       }
     } catch (err) {
-      // ignore permission errors, but log for debugging
       logger.debug({ err }, 'Permission error accessing defaultDir')
     }
-  }
 
   return dirs
 }
@@ -361,7 +373,6 @@ export function isPathAllowed(dirPath: string): boolean {
 export async function getSubDirectories(dirPath: string): Promise<string[]> {
   const resolved = resolve(dirPath)
   if (!isPathAllowed(resolved)) return []
-  if (!existsSync(resolved)) return []
   try {
     const s = await stat(resolved)
     if (!s.isDirectory()) return []
@@ -398,12 +409,14 @@ export interface StoredMessage {
   timestamp: number
 }
 
-/**
- * 获取消息文件路径
- *
- * @param conversationId - 会话 ID
- * @returns string - 消息文件路径
- */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function validateConversationId(id: string): void {
+  if (!UUID_RE.test(id)) {
+    throw new Error(`Invalid conversation ID: ${id}`)
+  }
+}
+
 function messageFilePath(conversationId: string): string {
   return join(MESSAGES_DIR, `${conversationId}.json`)
 }
@@ -414,12 +427,14 @@ function messageFilePath(conversationId: string): string {
  * @param conversationId - 会话 ID
  * @returns StoredMessage[] - 消息列表
  */
-export function loadMessages(conversationId: string): StoredMessage[] {
+export async function loadMessages(conversationId: string): Promise<StoredMessage[]> {
+  validateConversationId(conversationId)
   const filePath = messageFilePath(conversationId)
-  if (!existsSync(filePath)) return []
   try {
-    return JSON.parse(readFileSync(filePath, 'utf-8'))
-  } catch (err) {
+    const content = await readFileAsync(filePath, 'utf-8')
+    return JSON.parse(content)
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') return []
     logger.error({ err, conversationId }, 'Failed to parse messages file')
     return []
   }
@@ -434,6 +449,7 @@ export function loadMessages(conversationId: string): StoredMessage[] {
  * @returns Promise<void>
  */
 export async function saveMessages(conversationId: string, messages: StoredMessage[]): Promise<void> {
+  validateConversationId(conversationId)
   await mkdir(MESSAGES_DIR, { recursive: true })
   const filePath = messageFilePath(conversationId)
   const tmpPath = filePath + '.tmp'
@@ -446,9 +462,14 @@ export async function saveMessages(conversationId: string, messages: StoredMessa
  *
  * @param conversationId - 会话 ID
  */
-export function deleteMessages(conversationId: string): void {
+export async function deleteMessages(conversationId: string): Promise<void> {
+  validateConversationId(conversationId)
   const filePath = messageFilePath(conversationId)
-  if (existsSync(filePath)) {
-    unlinkSync(filePath)
+  try {
+    await unlink(filePath)
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') {
+      logger.error({ err, conversationId }, 'Failed to delete messages file')
+    }
   }
 }

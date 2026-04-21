@@ -1,0 +1,35 @@
+.codeBlock {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin: var(--space-sm) 0;
+  border: 1px solid var(--color-border);
+}
+
+.codeBlockHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px var(--space-md);
+  background: #2d2d2d;
+  font-size: var(--font-size-xs);
+}
+
+.codeBlockLang {
+  color: #8e8ea0;
+  text-transform: uppercase;
+}
+
+.codeBlockCopy {
+  background: none;
+  border: none;
+  color: #8e8ea0;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  min-height: unset;
+  min-width: unset;
+}
+
+.codeBlockCopy:hover {
+  color: #ffffff;
+}

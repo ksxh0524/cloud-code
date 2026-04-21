@@ -1,5 +1,6 @@
 import { Message } from '../types'
 import MessageItem from './MessageItem'
+import styles from './MessageList.module.css'
 
 interface MessageListProps {
   messages: Message[]
@@ -8,7 +9,7 @@ interface MessageListProps {
 
 export default function MessageList({ messages, isStreaming }: MessageListProps) {
   return (
-    <div className="message-list">
+    <div className={styles.messageList}>
       {messages.map((message, i) => (
         <MessageItem
           key={message.id}
@@ -16,12 +17,6 @@ export default function MessageList({ messages, isStreaming }: MessageListProps)
           isStreaming={isStreaming && i === messages.length - 1 && message.role === 'assistant' && message.type === 'text'}
         />
       ))}
-      <style>{`
-        .message-list {
-          display: flex; flex-direction: column; gap: 12px;
-          max-width: 100%; margin: 0 auto; width: 100%;
-        }
-      `}</style>
     </div>
   )
 }
