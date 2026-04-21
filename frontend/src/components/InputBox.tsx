@@ -44,12 +44,16 @@ export default function InputBox({ value, onChange, onSend, onInterrupt, isStrea
         .input-textarea {
           flex: 1; min-height: 44px; max-height: 120px; padding: 10px 8px;
           font-size: 16px; font-family: inherit; color: #111;
-          outline: none; resize: none; overflow-y: auto; line-height: 1.5;
-          border: none; background: transparent;
-          -webkit-appearance: none; -moz-appearance: none; appearance: none;
-          box-shadow: none;
+          resize: none; overflow-y: auto; line-height: 1.5;
+          border: 0 !important; margin: 0; padding: 10px 8px;
+          background: transparent !important;
+          outline: none !important;
+          -webkit-appearance: none; appearance: none;
+          box-shadow: none !important;
+          -webkit-box-shadow: none !important;
+          -webkit-tap-highlight-color: transparent;
+          background-color: transparent !important;
         }
-        .input-textarea:focus { outline: none; box-shadow: none; }
         .input-textarea::placeholder { color: #999; }
         .input-textarea:disabled { color: #999; }
         .send-button { width: 40px; height: 40px; border-radius: 10px; border: none; background: #e5e5e5; color: #999; cursor: not-allowed; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s ease; }
