@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { authFetch } from '../lib/fetch'
 import { toast } from '../components/Toast'
 import type { Conversation } from '../types'
+import { logger } from '../lib/logger'
 
 /**
  * useConversations Hook
@@ -30,6 +31,7 @@ export function useConversations() {
       const data = await res.json()
       setConversations(data)
     } catch (error) {
+      logger.error('Failed to load conversations', { error: String(error) })
       toast.error('加载对话列表失败')
     }
   }, [])
@@ -76,6 +78,7 @@ export function useConversations() {
       await loadConversations()
       return conv
     } catch (error) {
+      logger.error('Failed to create conversation', { workDir, error: String(error) })
       toast.error('创建对话失败')
       return null
     }
@@ -103,6 +106,7 @@ export function useConversations() {
       )
       return true
     } catch (error) {
+      logger.error('Failed to rename conversation', { id, newName, error: String(error) })
       toast.error('重命名失败')
       return false
     }
@@ -122,6 +126,7 @@ export function useConversations() {
       setConversations(prev => prev.filter(c => c.id !== id))
       return true
     } catch (error) {
+      logger.error('Failed to delete conversation', { id, error: String(error) })
       toast.error('删除对话失败')
       return false
     }
