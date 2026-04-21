@@ -11,6 +11,7 @@ export default function ChatNew() {
   const [showSidebar, setShowSidebar] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
   const [inputValue, setInputValue] = useState('')
+  const [hasConnected, setHasConnected] = useState(false)
   const sessionIdRef = useRef<string | null>(null)
 
   const { conversations, createConversation, updateConversation, deleteConversation } = useConversations()
@@ -31,6 +32,8 @@ export default function ChatNew() {
       toast.warning('连接异常')
     }, [setIsStreaming]),
   })
+
+  if (isConnected && !hasConnected) setHasConnected(true)
 
   sessionIdRef.current = sessionId
 
@@ -89,6 +92,7 @@ export default function ChatNew() {
       messages={messages}
       messagesEndRef={scrollRef}
       isConnected={isConnected}
+      hasConnected={hasConnected}
       inputValue={inputValue}
       onInputChange={setInputValue}
       onSendMessage={handleSendMessage}

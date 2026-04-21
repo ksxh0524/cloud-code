@@ -33,6 +33,7 @@ interface ChatLayoutProps {
 
   // 连接状态
   isConnected: boolean
+  hasConnected: boolean
 
   // 输入
   inputValue: string
@@ -64,6 +65,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     messages,
     messagesEndRef,
     isConnected,
+    hasConnected,
     inputValue,
     onInputChange,
     onSendMessage,
@@ -118,7 +120,7 @@ export function ChatLayout(props: ChatLayoutProps) {
 
       {/* 主内容区 */}
       <main className="main-content">
-        <ConnectionBanner isConnected={isConnected} />
+        <ConnectionBanner isConnected={isConnected} hasConnected={hasConnected} />
         {/* 顶部导航 */}
         <header className="chat-header">
           <button className="menu-button" onClick={onToggleSidebar} aria-label="打开菜单">
@@ -196,7 +198,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 90; cursor: pointer; }
         .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
         .chat-header { height: 56px; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; padding: 0 16px; gap: 12px; background: #fff; }
-        .menu-button { display: none; background: none; border: none; cursor: pointer; padding: 8px; color: #333; min-width: 40px; min-height: 40px; border-radius: 8px; align-items: center; justify-content: center; transition: background 0.15s; }
+        .menu-button { display: none; background: none; border: none; cursor: pointer; padding: 8px; color: #333; min-width: 40px; min-height: 40px; border-radius: 8px; -webkit-tap-highlight-color: transparent; transition: background 0.15s; }
         .menu-button:hover { background: #f0f0f0; }
         .chat-title { flex: 1; font-size: 16px; font-weight: 600; color: #111; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .header-actions { display: flex; gap: 8px; }
@@ -204,7 +206,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         .interrupt-btn:hover { background: #fee2e2; border-color: #fca5a5; }
         .chat-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .messages-container { flex: 1; overflow-y: auto; padding: 16px; }
-        .input-container { padding: 16px; border-top: 1px solid #e5e5e5; background: #fff; }
+        .input-container { padding: 16px; background: #fff; }
         .connection-warning { text-align: center; padding: 8px; background: #f7f7f8; color: #666; font-size: 13px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e5e5e5; }
         .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #999; text-align: center; padding: 20px; }
         .empty-state h2 { font-size: 20px; margin-bottom: 8px; color: #111; }
@@ -216,7 +218,7 @@ export function ChatLayout(props: ChatLayoutProps) {
           .sidebar.open { left: 0; box-shadow: 2px 0 8px rgba(0,0,0,0.15); }
           .sidebar-overlay { display: block; z-index: 95; }
           .close-sidebar { display: flex; }
-          .menu-button { display: block; }
+          .menu-button { display: flex; align-items: center; justify-content: center; }
           .messages-container { padding: 12px; }
           .input-container { padding: 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
           .chat-header { padding-top: max(12px, env(safe-area-inset-top)); }
