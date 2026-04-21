@@ -6,6 +6,8 @@ export interface Conversation {
   cliType: string
   createdAt: string
   updatedAt: string
+  /** SDK Session ID（用于恢复会话） */
+  sdkSessionId?: string
 }
 
 export interface Message {
@@ -19,6 +21,13 @@ export interface Message {
     toolInput?: Record<string, unknown>
     toolOutput?: string
   }
+  timestamp?: number
+}
+
+/** 历史消息接口，用于多轮对话 */
+export interface HistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
   timestamp?: number
 }
 

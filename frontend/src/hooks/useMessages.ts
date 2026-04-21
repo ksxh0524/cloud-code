@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { authFetch } from '../lib/fetch'
-import type { Message } from '../types'
+import type { Message, HistoryMessage } from '../types'
 
 // 消息 ID 计数器
 let msgCounter = 0
@@ -17,6 +17,7 @@ function nextMsgId() {
  * useMessages Hook
  *
  * 管理消息列表，包括加载、添加和处理 WebSocket 消息
+ * 支持多轮对话：自动维护历史消息上下文和 SDK Session ID
  *
  * @param conversationId - 当前会话 ID
  * @returns {
@@ -27,11 +28,16 @@ function nextMsgId() {
  *   loadMessages: 加载会话历史消息
  *   clearMessages: 清空消息
  *   handleWebSocketMessage: 处理 WebSocket 消息
+ *   getHistoryForPrompt: 获取用于 prompt 的历史消息
+ *   sdkSessionId: SDK Session ID
+ *   setSdkSessionId: 设置 SDK Session ID
  * }
  */
 export function useMessages(_conversationId: string | null) {
   const [messages, setMessages] = useState<Message[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
+  const [sdkSessionId, setSdkSessionIdState] = useState<string | null>(null)
+  const sdkSessionIdRef = useRef<string | null>(null)
 
   /**
    * 加载会话历史消息
@@ -55,7 +61,35 @@ export function useMessages(_conversationId: string | null) {
    */
   const clearMessages = useCallback(() => {
     setMessages([])
+    sdkSessionIdRef.current = null
+    setSdkSessionIdState(null)
   }, [])
+
+  /**
+   * 设置 SDK Session ID（同时更新 ref 和 state）
+   */
+  const setSdkSessionId = useCallback((id: string | null) => {
+    sdkSessionIdRef.current = id
+    setSdkSessionIdState(id)
+  }, [])
+
+  /**
+   * 获取用于 prompt 的历史消息
+   * 过滤出 user 和 assistant 的文本消息作为对话上下文
+   */
+  const getHistoryForPrompt = useCallback((): HistoryMessage[] => {
+    return messages
+      .filter((msg): msg is Message & { role: 'user' | 'assistant'; type: 'text' } =>
+        (msg.role === 'user' || msg.role === 'assistant') &&
+        (msg.type === 'text' || msg.type === undefined) &&
+        msg.content.trim().length > 0
+      )
+      .map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp,
+      }))
+  }, [messages])
 
   /**
    * 添加用户消息
@@ -217,5 +251,8 @@ export function useMessages(_conversationId: string | null) {
     loadMessages,
     clearMessages,
     handleWebSocketMessage,
+    getHistoryForPrompt,
+    sdkSessionId,
+    setSdkSessionId,
   }
 }
