@@ -310,8 +310,9 @@ export async function getWorkDirs(): Promise<{ path: string; name: string; isCon
           .map(d => ({ path: join(defaultDir, d.name), name: d.name, isConfig: false }))
         dirs.push(...subs)
       }
-    } catch {
-      // ignore permission errors
+    } catch (err) {
+      // ignore permission errors, but log for debugging
+      logger.debug({ err }, 'Permission error accessing defaultDir')
     }
   }
 
@@ -368,7 +369,8 @@ export async function getSubDirectories(dirPath: string): Promise<string[]> {
     return entries
       .filter(d => d.isDirectory() && !d.name.startsWith('.'))
       .map(d => d.name)
-  } catch {
+  } catch (err) {
+    logger.debug({ dirPath, error: String(err) }, 'Error reading subdirectories')
     return []
   }
 }
