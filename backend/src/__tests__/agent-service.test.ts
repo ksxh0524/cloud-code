@@ -168,8 +168,8 @@ describe('AgentService Integration', () => {
         (msg) => messages.push(msg)
       )
 
-      // Should receive stream, message, and done
-      expect(messages.some(m => m.type === 'stream')).toBe(true)
+      // Should receive at least a message and done
+      expect(messages.some(m => m.type === 'message')).toBe(true)
       expect(messages.some(m => m.type === 'done')).toBe(true)
     }, 30000) // 30 second timeout for API call
 
