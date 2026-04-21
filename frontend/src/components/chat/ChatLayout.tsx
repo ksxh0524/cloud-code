@@ -34,6 +34,7 @@ interface ChatLayoutProps {
   // 连接状态
   isConnected: boolean
   hasConnected: boolean
+  connectionState?: 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
 
   // 输入
   inputValue: string
@@ -43,6 +44,9 @@ interface ChatLayoutProps {
   // 流式响应
   isStreaming: boolean
   onInterrupt: () => void
+
+  // 日志查看器
+  onOpenLogViewer?: () => void
 }
 
 /**
@@ -66,11 +70,13 @@ export function ChatLayout(props: ChatLayoutProps) {
     messagesEndRef,
     isConnected,
     hasConnected,
+    connectionState,
     inputValue,
     onInputChange,
     onSendMessage,
     isStreaming,
     onInterrupt,
+    onOpenLogViewer,
   } = props
 
   return (
@@ -105,8 +111,16 @@ export function ChatLayout(props: ChatLayoutProps) {
 
         <div className="sidebar-footer">
           <div className="connection-status">
-            <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`} />
-            <span>{isConnected ? '已连接' : '未连接'}</span>
+            <span className={`status-dot ${isConnected ? 'connected' : connectionState === 'reconnecting' ? 'reconnecting' : 'disconnected'}`} />
+            <span>
+              {isConnected
+                ? '已连接'
+                : connectionState === 'reconnecting'
+                ? '重连中...'
+                : connectionState === 'connecting'
+                ? '连接中...'
+                : '未连接'}
+            </span>
           </div>
           <Link
             to="/settings"
@@ -115,6 +129,17 @@ export function ChatLayout(props: ChatLayoutProps) {
           >
             设置
           </Link>
+          {onOpenLogViewer && (
+            <button
+              className="settings-link"
+              onClick={() => {
+                onOpenLogViewer()
+                onToggleSidebar()
+              }}
+            >
+              📝 查看日志
+            </button>
+          )}
         </div>
       </aside>
 
@@ -152,9 +177,9 @@ export function ChatLayout(props: ChatLayoutProps) {
             </div>
 
             <div className="input-container">
-              {!isConnected && (
-                <div className="connection-warning">
-                  WebSocket 连接已断开，正在重连...
+              {connectionState === 'reconnecting' && (
+                <div className="connection-warning reconnecting">
+                  连接中断，正在尝试重连 ({connectionState})...
                 </div>
               )}
               <InputBox
@@ -193,6 +218,11 @@ export function ChatLayout(props: ChatLayoutProps) {
         .status-dot { width: 6px; height: 6px; border-radius: 50%; }
         .status-dot.connected { background: #16a34a; }
         .status-dot.disconnected { background: #ccc; }
+        .status-dot.reconnecting { background: #f59e0b; animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
         .settings-link { display: flex; align-items: center; gap: 8px; padding: 10px; color: #555; text-decoration: none; border-radius: 8px; transition: background 0.15s; font-size: 14px; min-height: 44px; }
         .settings-link:hover { background: #eee; color: #111; }
         .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 90; cursor: pointer; }
