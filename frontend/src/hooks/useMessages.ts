@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { authFetch } from '../lib/fetch'
 import type { Message, HistoryMessage } from '../types'
+import { logger } from '../lib/logger'
 
 // 消息 ID 计数器
 let msgCounter = 0
@@ -51,7 +52,8 @@ export function useMessages(_conversationId: string | null) {
       } else {
         setMessages([])
       }
-    } catch {
+    } catch (err) {
+      logger.error('Failed to load messages', { conversationId: id, error: String(err) })
       setMessages([])
     }
   }, [])
