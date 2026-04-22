@@ -12,7 +12,7 @@ Cloud Code is a mobile-optimized web interface for Claude Code. Users interact w
 - **Frontend**: React 19 + Vite 6 + TypeScript + `@headlessui/react` + `react-markdown` + `react-syntax-highlighter` + CSS Modules
 - **Validation**: Zod on both REST endpoints and WebSocket messages
 - **Data**: `~/.cloud-code/data.json` (conversations + config) + `~/.cloud-code/messages/{id}.json` (per-conversation messages)
-- **Testing**: Vitest (backend & frontend unit), Playwright (E2E)
+- **Testing**: Vitest (backend & frontend unit), Playwright (E2E, serial execution with 5 browser projects including Mobile Chrome/Safari)
 
 ## Common Commands
 
@@ -24,8 +24,8 @@ pnpm install
 pnpm dev:all
 
 # Development (separate terminals)
-cd backend && pnpm dev          # Backend on port 18765 (tsx watch)
-pnpm dev                        # Frontend on port 18766 (Vite)
+pnpm dev:backend                # Backend on port 18765 (tsx watch)
+pnpm dev                        # Frontend on port 18766 (Vite, binds 0.0.0.0 for LAN)
 
 # Production service management via manager.sh
 ./manager.sh start              # Start both services (dev mode)
@@ -35,6 +35,8 @@ pnpm dev                        # Frontend on port 18766 (Vite)
 ./manager.sh status             # Check service status
 ./manager.sh logs [backend|frontend]  # View logs
 ./manager.sh build              # Build production artifacts
+./manager.sh update             # Git pull + reinstall deps (prompts restart)
+./manager.sh clean              # Remove logs older than 7 days
 
 # Build
 pnpm build                      # Frontend + Backend production build
@@ -48,9 +50,10 @@ npx playwright test                              # All E2E tests
 npx playwright test test/mobile-ui.spec.ts       # Single E2E file
 npx playwright test --headed                     # Visible browser
 
-# Lint & format
+# Lint & format (root commands only target frontend/src)
 pnpm lint && pnpm lint:fix
-pnpm format
+pnpm format && pnpm format:check
+cd backend && pnpm lint          # Backend has separate lint command
 ```
 
 ## Architecture
@@ -120,11 +123,11 @@ Server → Client:
 | Frontend (Vite dev) | 18766 |
 | Backend API + WebSocket | 18765 |
 
-Vite proxies `/api` to the backend and `/ws` for WebSocket in dev mode.
+Vite proxies `/api` to the backend and `/ws` for WebSocket in dev mode. Frontend binds `0.0.0.0` (LAN accessible), uses `strictPort: true`.
 
 ## Code Style
 
-- No semicolons, single quotes, 2-space indentation, trailing commas (es5), print width 100
+- No semicolons, single quotes, 2-space indentation, trailing commas (es5), print width 100, arrow parens avoid
 - Components: PascalCase, hooks: camelCase with `use` prefix
 - Backend uses ESM (`"type": "module"` in package.json)
 - CSS Modules: `Component.tsx` → `Component.module.css`, design tokens in `styles/tokens.css`
@@ -135,7 +138,7 @@ Vite proxies `/api` to the backend and `/ws` for WebSocket in dev mode.
 
 ## Environment
 
-- Node.js 18+ (pinned in `.nvmrc` and `engines` field)
+- Node.js 20 (pinned in `.nvmrc`)
 - Backend `.env` (see `backend/.env.example`):
   - `ANTHROPIC_BASE_URL` — API base URL (supports ZhiPu/智谱 and other providers)
   - `ANTHROPIC_AUTH_TOKEN` — API authentication key
