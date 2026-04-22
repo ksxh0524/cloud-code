@@ -51,9 +51,3 @@ export async function authFetch(
     throw error
   }
 }
-
-/**
- * 简化版本的 fetch（不带认证）
- * 用于不需要 API Key 的请求
- */
-export const fetchWithoutAuth = window.fetch.bind(window)

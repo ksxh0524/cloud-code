@@ -25,7 +25,7 @@
 
 ## 环境要求
 
-- **Node.js**: 18+ （推荐 20 LTS）
+- **Node.js**: 20 LTS
 - **包管理器**: pnpm
 - **操作系统**: Linux/macOS/Windows
 - **现代浏览器**: Chrome, Firefox, Safari, Edge

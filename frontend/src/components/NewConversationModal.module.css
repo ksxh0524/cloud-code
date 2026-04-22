@@ -1,0 +1,63 @@
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: var(--color-text-tertiary, #888);
+}
+
+.pathPreview {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--color-bg-tertiary, #f7f7f8);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary, #666);
+  word-break: break-all;
+}
+
+.pathPreviewPath {
+  color: var(--color-text-primary, #111);
+  font-weight: 500;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.cancelButton {
+  padding: 12px 20px;
+  background: var(--color-bg-tertiary, #f0f0f0);
+  border: 1px solid var(--color-border, #e5e5e5);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--color-text-primary, #111);
+  min-height: 44px;
+  flex: 1;
+  min-width: 100px;
+}
+
+.confirmButton {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  min-height: 44px;
+  flex: 1;
+  min-width: 100px;
+  transition: opacity 0.2s;
+}
+
+.confirmButton:enabled {
+  background: var(--color-accent, #111);
+  color: var(--color-text-on-accent, #fff);
+  cursor: pointer;
+}
+
+.confirmButton:disabled {
+  background: var(--color-bg-tertiary, #e5e5e5);
+  color: var(--color-text-tertiary, #999);
+  cursor: not-allowed;
+}

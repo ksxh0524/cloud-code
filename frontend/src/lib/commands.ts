@@ -22,10 +22,6 @@ export function parseSlashCommand(input: string): { command: string; args: strin
   return { command, args }
 }
 
-export function isKnownCommand(command: string): boolean {
-  return SLASH_COMMANDS.some(c => c.name === command)
-}
-
 export function matchCommands(partial: string): SlashCommand[] {
   if (!partial.startsWith('/')) return []
   const lower = partial.toLowerCase()

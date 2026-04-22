@@ -527,12 +527,20 @@ do_build() {
     fi
 
     log_info "构建后端..."
-    (cd "$SCRIPT_DIR/backend" && pnpm run build)
-    log_success "后端构建完成"
+    if (cd "$SCRIPT_DIR/backend" && pnpm run build); then
+        log_success "后端构建完成"
+    else
+        log_error "后端构建失败"
+        exit 1
+    fi
 
     log_info "构建前端..."
-    (cd "$SCRIPT_DIR/frontend" && pnpm run build)
-    log_success "前端构建完成"
+    if (cd "$SCRIPT_DIR/frontend" && pnpm run build); then
+        log_success "前端构建完成"
+    else
+        log_error "前端构建失败"
+        exit 1
+    fi
 
     echo ""
     log_success "构建完成！使用 ${CYAN}./manager.sh start --prod${NC} 以生产模式启动"
@@ -571,13 +579,8 @@ do_update() {
     fi
 
     log_info "安装依赖..."
-    for dir in "." "backend" "frontend"; do
-        if [ -f "$SCRIPT_DIR/$dir/package.json" ]; then
-            log_info "安装 $dir 依赖..."
-            (cd "$SCRIPT_DIR/$dir" && pnpm install)
-            log_success "$dir"
-        fi
-    done
+    pnpm install
+    log_success "依赖安装完成"
 
     echo ""
     log_success "更新完成！"

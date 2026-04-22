@@ -101,10 +101,10 @@
 
 .reconnecting {
   background: var(--color-warning);
-  animation: pulse 1.5s infinite;
+  animation: globalPulse 1.5s infinite;
 }
 
-@keyframes pulse {
+@keyframes globalPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }

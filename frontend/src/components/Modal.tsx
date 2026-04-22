@@ -40,7 +40,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
       requestAnimationFrame(() => {
         const focusable = getFocusableElements()
         if (focusable.length > 0) {
-          focusable[0].focus()
+          focusable[0]!.focus()
         } else if (contentRef.current) {
           contentRef.current.focus()
         }
@@ -59,8 +59,8 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
       e.preventDefault()
       return
     }
-    const first = focusable[0]
-    const last = focusable[focusable.length - 1]
+    const first = focusable[0]!
+    const last = focusable[focusable.length - 1]!
     if (e.shiftKey) {
       if (document.activeElement === first) {
         e.preventDefault()

@@ -1,5 +1,6 @@
 import { Message } from '../types'
 import MessageItem from './MessageItem'
+import { MessageErrorBoundary } from './MessageErrorBoundary'
 import styles from './MessageList.module.css'
 
 interface MessageListProps {
@@ -11,11 +12,12 @@ export default function MessageList({ messages, isStreaming }: MessageListProps)
   return (
     <div className={styles.messageList}>
       {messages.map((message, i) => (
-        <MessageItem
-          key={message.id}
-          message={message}
-          isStreaming={isStreaming && i === messages.length - 1 && message.role === 'assistant' && message.type === 'text'}
-        />
+        <MessageErrorBoundary key={message.id}>
+          <MessageItem
+            message={message}
+            isStreaming={isStreaming && i === messages.length - 1 && message.role === 'assistant' && message.type === 'text'}
+          />
+        </MessageErrorBoundary>
       ))}
     </div>
   )

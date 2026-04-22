@@ -90,7 +90,7 @@ export function LogViewer({ isOpen, onClose }: LogViewerProps) {
   }
 
   // Build level class map for dynamic log level styling
-  const levelClassMap: Record<string, string> = {
+  const levelClassMap: Record<string, string | undefined> = {
     error: styles.logError,
     warn: styles.logWarn,
     debug: styles.logDebug,

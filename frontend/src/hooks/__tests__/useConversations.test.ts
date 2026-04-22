@@ -103,7 +103,7 @@ describe('useConversations', () => {
     })
 
     expect(result.current.conversations).toHaveLength(1)
-    expect(result.current.conversations[0].name).toBe('my-project')
+    expect(result.current.conversations[0]!.name).toBe('my-project')
   })
 
   it('should update a conversation', async () => {
@@ -138,7 +138,7 @@ describe('useConversations', () => {
       await result.current.updateConversation('1', 'New Name')
     })
 
-    expect(result.current.conversations[0].name).toBe('New Name')
+    expect(result.current.conversations[0]!.name).toBe('New Name')
   })
 
   it('should delete a conversation', async () => {

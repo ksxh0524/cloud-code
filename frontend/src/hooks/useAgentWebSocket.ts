@@ -84,8 +84,6 @@ export function useAgentWebSocket({
 
     ws.onopen = () => {
       logger.info('WebSocket connected', { workDir: workDirRef.current })
-      setIsConnected(true)
-      setConnectionState('connected')
 
       const wasReconnecting = retryCountRef.current > 0
       retryCountRef.current = 0
@@ -115,9 +113,14 @@ export function useAgentWebSocket({
           logger.debug(`WebSocket message: ${message.type}`, { sessionId: message.sessionId })
         }
 
-        if (message.type === 'connected' || message.type === 'initialized') {
-          logger.info(`WebSocket ${message.type}`, { sessionId: message.data?.sessionId })
+        if (message.type === 'connected') {
+          logger.info('WebSocket connected', { sessionId: message.data?.sessionId })
           setSessionId(message.data?.sessionId)
+        } else if (message.type === 'initialized') {
+          logger.info('WebSocket initialized', { sessionId: message.data?.sessionId })
+          setSessionId(message.data?.sessionId)
+          setIsConnected(true)
+          setConnectionState('connected')
         } else if (message.type === 'done' && message.data?.sdkSessionId) {
           // 捕获 SDK Session ID 用于会话恢复
           logger.info('SDK Session ID captured', { sdkSessionId: message.data.sdkSessionId })
@@ -177,11 +180,11 @@ export function useAgentWebSocket({
 
   const sendMessage = useCallback(
     (message: { type: string; data: PromptData }) => {
-      if (message.type === 'prompt' && sdkSessionIdRef.current) {
-        message.data.sdkSessionId = sdkSessionIdRef.current
-      }
+      const messageToSend = message.type === 'prompt' && sdkSessionIdRef.current
+        ? { ...message, data: { ...message.data, sdkSessionId: sdkSessionIdRef.current } }
+        : message
 
-      const serialized = JSON.stringify(message)
+      const serialized = JSON.stringify(messageToSend)
 
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         logger.debug(`Sending message: ${message.type}`)

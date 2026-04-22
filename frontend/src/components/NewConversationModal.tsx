@@ -3,6 +3,7 @@ import Modal from './Modal'
 import CustomSelect from './CustomSelect'
 import { authFetch } from '../lib/fetch'
 import { logger } from '../lib/logger'
+import styles from './NewConversationModal.module.css'
 
 interface WorkDir {
   path: string
@@ -69,7 +70,7 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
   return (
     <Modal open={open} onClose={onClose} title="新建对话">
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>加载中...</div>
+        <div className={styles.loading}>加载中...</div>
       ) : (
         <>
           <CustomSelect
@@ -90,13 +91,13 @@ export default function NewConversationModal({ open, onClose, onConfirm }: NewCo
             />
           )}
           {selectedDir && (
-            <div style={{ marginBottom: '16px', padding: '10px 12px', background: '#f7f7f8', borderRadius: '8px', fontSize: '13px', color: '#666', wordBreak: 'break-all' }}>
-              <div>将使用: <span style={{ color: '#111', fontWeight: 500 }}>{getFinalPath()}</span></div>
+            <div className={styles.pathPreview}>
+              <div>将使用: <span className={styles.pathPreviewPath}>{getFinalPath()}</span></div>
             </div>
           )}
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            <button onClick={onClose} style={{ padding: '12px 20px', background: '#f0f0f0', border: '1px solid #e5e5e5', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', color: '#111', minHeight: '44px', flex: 1, minWidth: '100px' }}>取消</button>
-            <button onClick={handleConfirm} disabled={!canConfirm} style={{ padding: '12px 20px', background: canConfirm ? '#111' : '#e5e5e5', color: canConfirm ? '#fff' : '#999', border: 'none', borderRadius: '8px', cursor: canConfirm ? 'pointer' : 'not-allowed', fontSize: '15px', minHeight: '44px', flex: 1, minWidth: '100px' }}>创建</button>
+          <div className={styles.buttonGroup}>
+            <button onClick={onClose} className={styles.cancelButton}>取消</button>
+            <button onClick={handleConfirm} disabled={!canConfirm} className={styles.confirmButton}>创建</button>
           </div>
         </>
       )}

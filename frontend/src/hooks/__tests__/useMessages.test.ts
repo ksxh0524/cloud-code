@@ -43,9 +43,9 @@ describe('useMessages', () => {
     })
 
     expect(result.current.messages).toHaveLength(1)
-    expect(result.current.messages[0].role).toBe('user')
-    expect(result.current.messages[0].content).toBe('Hello')
-    expect(result.current.messages[0].type).toBe('text')
+    expect(result.current.messages[0]!.role).toBe('user')
+    expect(result.current.messages[0]!.content).toBe('Hello')
+    expect(result.current.messages[0]!.type).toBe('text')
   })
 
   it('should handle stream messages for token-level streaming', () => {
@@ -60,8 +60,8 @@ describe('useMessages', () => {
     })
 
     expect(result.current.messages).toHaveLength(1)
-    expect(result.current.messages[0].content).toBe('Hello')
-    expect(result.current.messages[0].role).toBe('assistant')
+    expect(result.current.messages[0]!.content).toBe('Hello')
+    expect(result.current.messages[0]!.role).toBe('assistant')
 
     // Subsequent stream token appends
     act(() => {

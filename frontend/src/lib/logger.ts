@@ -307,11 +307,4 @@ export const logger = new FrontendLogger({
   minLevel: 'debug',
 })
 
-/**
- * React Hook: 使用日志
- */
-export function useLogger() {
-  return logger
-}
-
 export type { LogEntry, LoggerOptions }

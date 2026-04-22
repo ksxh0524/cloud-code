@@ -104,7 +104,7 @@ export default function ChatNew() {
 
   sessionIdRef.current = sessionId
 
-  const handleSendMessage = () => {
+  const handleSendMessage = useCallback(() => {
     if (!inputValue.trim() || isStreaming || !currentConversation) return
 
     // 拦截斜杠命令
@@ -213,53 +213,71 @@ export default function ChatNew() {
         history: history.slice(-20),
       },
     })
-  }
+  }, [inputValue, isStreaming, currentConversation, parseSlashCommand, clearMessages, setSdkSessionId, setMessageSdkSessionId, sendMessage, conversationId, messageSdkSessionId, setIsStreaming, addUserMessage, addSystemMessage, isConnected, connectionState, messages.length, getHistoryForPrompt])
 
-  const handleInterrupt = () => {
+  const handleInterrupt = useCallback(() => {
     sendMessage({ type: 'interrupt', data: { prompt: '', workDir: currentConversation?.workDir || '' } })
     setIsStreaming(false)
-  }
+  }, [sendMessage, currentConversation, setIsStreaming])
 
-  const handleCreateConversation = async (workDir: string) => {
-    logger.userAction('create_conversation', { workDir })
-    const conv = await createConversation(workDir)
-    if (conv) {
-      setConversationId(conv.id)
+  const handleCreateConversation = useCallback(async (workDir: string) => {
+    try {
+      logger.userAction('create_conversation', { workDir })
+      const conv = await createConversation(workDir)
+      if (conv) {
+        setConversationId(conv.id)
+        setShowSidebar(false)
+        clearMessages()
+        setSdkSessionId(null)
+        setMessageSdkSessionId(null)
+        logger.info('Conversation created', { conversationId: conv.id, workDir })
+      }
+    } catch (err) {
+      logger.error('Failed to create conversation', { error: String(err) })
+      toast.error('创建对话失败')
+    }
+  }, [createConversation, clearMessages, setSdkSessionId, setMessageSdkSessionId])
+
+  const handleSelectConversation = useCallback(async (id: string) => {
+    try {
+      logger.userAction('select_conversation', { conversationId: id })
+      const target = conversations.find(c => c.id === id)
+      setConversationId(id)
       setShowSidebar(false)
-      clearMessages()
-      setSdkSessionId(null)
-      setMessageSdkSessionId(null)
-      logger.info('Conversation created', { conversationId: conv.id, workDir })
+      setSdkSessionId(target?.sdkSessionId || null)
+      setMessageSdkSessionId(target?.sdkSessionId || null)
+      await loadMessages(id)
+    } catch (err) {
+      logger.error('Failed to select conversation', { error: String(err) })
+      toast.error('加载对话失败')
     }
-  }
+  }, [conversations, setSdkSessionId, setMessageSdkSessionId, loadMessages])
 
-  const handleSelectConversation = async (id: string) => {
-    logger.userAction('select_conversation', { conversationId: id })
-    const target = conversations.find(c => c.id === id)
-    setConversationId(id)
-    setShowSidebar(false)
-    // 从持久化的 Conversation 恢复 SDK Session ID
-    setSdkSessionId(target?.sdkSessionId || null)
-    setMessageSdkSessionId(target?.sdkSessionId || null)
-    await loadMessages(id)
-    logger.info('Messages loaded', { conversationId: id, messageCount: messages.length })
-  }
-
-  const handleDeleteConversation = async (id: string) => {
-    logger.userAction('delete_conversation', { conversationId: id })
-    const ok = await deleteConversation(id)
-    if (ok && id === conversationId) {
-      setConversationId(null)
-      clearMessages()
+  const handleDeleteConversation = useCallback(async (id: string) => {
+    try {
+      logger.userAction('delete_conversation', { conversationId: id })
+      const ok = await deleteConversation(id)
+      if (ok && id === conversationId) {
+        setConversationId(null)
+        clearMessages()
+      }
+      if (ok) {
+        logger.info('Conversation deleted', { conversationId: id })
+      }
+    } catch (err) {
+      logger.error('Failed to delete conversation', { error: String(err) })
+      toast.error('删除对话失败')
     }
-    if (ok) {
-      logger.info('Conversation deleted', { conversationId: id })
-    }
-  }
+  }, [deleteConversation, conversationId, clearMessages])
 
-  const handleRenameConversation = async (id: string, newName: string) => {
-    await updateConversation(id, newName)
-  }
+  const handleRenameConversation = useCallback(async (id: string, newName: string) => {
+    try {
+      await updateConversation(id, newName)
+    } catch (err) {
+      logger.error('Failed to rename conversation', { error: String(err) })
+      toast.error('重命名失败')
+    }
+  }, [updateConversation])
 
   const handleToggleSidebar = useCallback(() => setShowSidebar(s => !s), [])
   const handleToggleNewModal = useCallback(() => setShowNewModal(s => !s), [])

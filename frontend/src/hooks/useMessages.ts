@@ -28,12 +28,9 @@ export function useMessages(_conversationId: string | null) {
       if (res.ok) {
         const data = await res.json()
         setMessages(data)
-      } else {
-        setMessages([])
       }
     } catch (err) {
       logger.error('Failed to load messages', { conversationId: id, error: String(err) })
-      setMessages([])
     }
   }, [])
 

@@ -28,8 +28,8 @@ export default function InputBox({ value, onChange, onSend, onInterrupt, isStrea
 
   useEffect(() => {
     if (value.startsWith('/')) {
-      const commands = matchCommands(value.split(/\s/)[0])
-      if (commands.length > 0 && commands[0].name !== value.trim().toLowerCase()) {
+      const commands = matchCommands(value.split(/\s/)[0] ?? '')
+      if (commands.length > 0 && commands[0]!.name !== value.trim().toLowerCase()) {
         setFilteredCommands(commands)
         setCommandMenuOpen(true)
         setSelectedIndex(0)
@@ -67,7 +67,7 @@ export default function InputBox({ value, onChange, onSend, onInterrupt, isStrea
       }
       if (e.key === 'Tab' || e.key === 'Enter') {
         e.preventDefault()
-        selectCommand(filteredCommands[selectedIndex])
+        selectCommand(filteredCommands[selectedIndex]!)
         return
       }
       if (e.key === 'Escape') {
