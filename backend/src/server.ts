@@ -67,6 +67,10 @@ app.use('/api', requireApiKey, router)
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error({ err }, 'Unhandled request error')
+  // 如果 headers 已发送，则不能再发送响应
+  if (res.headersSent) {
+    return _next(err)
+  }
   res.status(500).json({ error: 'Internal server error' })
 })
 
@@ -74,9 +78,32 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // WebSocket 处理
 // ============================================
 
+/**
+ * 脱敏日志数据，移除敏感信息
+ */
+function sanitizeLogData(str: string): string {
+  return str
+    .replace(/"apiKey"\s*:\s*"[^"]*"/gi, '"apiKey":"[REDACTED]"')
+    .replace(/"api_key"\s*:\s*"[^"]*"/gi, '"api_key":"[REDACTED]"')
+    .replace(/"authorization"\s*:\s*"[^"]*"/gi, '"authorization":"[REDACTED]"')
+    .replace(/"token"\s*:\s*"[^"]*"/gi, '"token":"[REDACTED]"')
+    .replace(/"password"\s*:\s*"[^"]*"/gi, '"password":"[REDACTED]"')
+    .replace(/"secret"\s*:\s*"[^"]*"/gi, '"secret":"[REDACTED]"')
+}
+
 function safeSend(ws: WebSocket, data: unknown): void {
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(data))
+    try {
+      ws.send(JSON.stringify(data))
+    } catch (err) {
+      logger.error({ err, dataType: typeof data }, 'Failed to stringify WebSocket message')
+      // 尝试发送简化错误信息
+      try {
+        ws.send(JSON.stringify({ type: 'error', data: 'Message serialization failed' }))
+      } catch {
+        // 忽略二次失败
+      }
+    }
   }
 }
 
@@ -139,12 +166,21 @@ wss.on('connection', (ws: WebSocket) => {
     }
 
     const messageStartTime = Date.now()
+    
+    // 检查消息大小
+    const MAX_MESSAGE_SIZE = 1024 * 1024 // 1MB
+    if (data.length > MAX_MESSAGE_SIZE) {
+      safeSend(ws, { type: 'error', data: 'Message too large', sessionId })
+      ws.close(4004, 'Message too large')
+      return
+    }
+    
     try {
       const raw = JSON.parse(data.toString())
       logger.debug({
         sessionId,
         messageType: raw.type,
-        rawData: data.toString().slice(0, 500),
+        rawData: sanitizeLogData(data.toString().slice(0, 200)),
       }, 'WebSocket message received')
 
       const parseResult = wsMessageSchema.safeParse(raw)
@@ -289,8 +325,8 @@ wss.on('connection', (ws: WebSocket) => {
 
               // 增量保存：每积累 5 条消息保存一次
               if (currentConversationId && messageAccumulator.length >= 5) {
-                const msgsToSave = [...messageAccumulator]
-                messageAccumulator.length = 0
+                // 使用splice原子性操作避免竞态条件
+                const msgsToSave = messageAccumulator.splice(0, messageAccumulator.length)
                 saveMessages(currentConversationId, msgsToSave).catch(err => {
                   logger.error({ err, conversationId: currentConversationId }, 'Failed to save messages (incremental)')
                 })
@@ -407,13 +443,41 @@ wss.on('connection', (ws: WebSocket) => {
 
 let isShuttingDown = false
 
-function shutdown(signal: string) {
+async function shutdown(signal: string) {
   if (isShuttingDown) return
   isShuttingDown = true
 
   logger.info({ signal }, 'Shutting down...')
 
-  wss.clients.forEach(ws => ws.close())
+  // 等待所有WebSocket连接优雅关闭
+  const closePromises = Array.from(wss.clients).map(ws => 
+    new Promise<void>((resolve) => {
+      if (ws.readyState === WebSocket.CLOSED) {
+        resolve()
+        return
+      }
+      
+      // 设置关闭超时
+      const timeout = setTimeout(() => {
+        logger.warn('WebSocket close timeout, terminating')
+        ws.terminate()
+        resolve()
+      }, 2000)
+      
+      ws.once('close', () => {
+        clearTimeout(timeout)
+        resolve()
+      })
+      
+      ws.close()
+    })
+  )
+
+  // 等待所有连接关闭，最多5秒
+  await Promise.race([
+    Promise.all(closePromises),
+    new Promise(resolve => setTimeout(resolve, 5000))
+  ])
 
   server.close(() => {
     logger.info('Server closed')
@@ -426,8 +490,8 @@ function shutdown(signal: string) {
   }, 5000)
 }
 
-process.on('SIGTERM', () => shutdown('SIGTERM'))
-process.on('SIGINT', () => shutdown('SIGINT'))
+process.on('SIGTERM', () => void shutdown('SIGTERM'))
+process.on('SIGINT', () => void shutdown('SIGINT'))
 
 // ============================================
 // 启动服务器

@@ -4,7 +4,7 @@ import { useConversations } from '../useConversations'
 
 const mockFetch = vi.fn()
 vi.mock('../../lib/fetch', () => ({
-  authFetch: (...args: any[]) => mockFetch(...args),
+  authFetch: (...args: Parameters<typeof fetch>) => mockFetch(...args),
 }))
 
 vi.mock('../../components/Toast', () => ({

@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
+import { isAbsolute } from 'path'
 import { z } from 'zod'
 import { logger } from './logger.js'
 import {
@@ -43,7 +44,7 @@ const createConversationSchema = z.object({
   name: z.string().min(1).max(100),
   /** 工作目录路径（必须是绝对路径且在允许的根目录下） */
   workDir: z.string().min(1).refine(
-    (val) => val.startsWith('/') && isPathAllowed(val),
+    (val) => isAbsolute(val) && isPathAllowed(val),
     { message: 'workDir must be an absolute path within allowed directories' }
   ),
   /** CLI 类型，默认为 'claude' */
@@ -56,8 +57,8 @@ const createConversationSchema = z.object({
 const updateConversationSchema = z.object({
   /** 会话名称，1-100 字符（可选） */
   name: z.string().min(1).max(100).optional(),
-  /** SDK Session ID（可选） */
-  sdkSessionId: z.string().optional(),
+  /** SDK Session ID（可选，非空字符串） */
+  sdkSessionId: z.string().min(1).optional(),
 })
 
 /**
@@ -66,7 +67,7 @@ const updateConversationSchema = z.object({
 const updateConfigSchema = z.object({
   /** 默认工作目录路径（可选，必须是绝对路径且在允许的根目录下） */
   defaultWorkDir: z.string().optional().refine(
-    (val) => !val || (val.startsWith('/') && isPathAllowed(val)),
+    (val) => !val || (isAbsolute(val) && isPathAllowed(val)),
     { message: 'defaultWorkDir must be an absolute path within allowed directories' }
   ),
 })
@@ -215,10 +216,27 @@ router.get('/workdirs', asyncHandler(async (_req: Request, res: Response) => {
  * @status 403 - 路径不允许访问
  */
 router.get('/directories', asyncHandler(async (req: Request, res: Response) => {
-  const path = req.query.path as string
-  if (!path) { res.status(400).json({ error: 'path query parameter is required' }); return }
-  if (!isPathAllowed(path)) { res.status(403).json({ error: 'Access denied' }); return }
-  res.json(await getSubDirectories(path))
+  // 处理数组情况
+  const rawPath = req.query.path
+  const path = Array.isArray(rawPath) ? rawPath[0] : rawPath
+  
+  if (!path || typeof path !== 'string') { 
+    res.status(400).json({ error: 'path query parameter is required and must be a string' }); 
+    return 
+  }
+  
+  const trimmedPath = path.trim()
+  if (!trimmedPath) {
+    res.status(400).json({ error: 'path cannot be empty' }); 
+    return
+  }
+  
+  if (!isPathAllowed(trimmedPath)) { 
+    res.status(403).json({ error: 'Access denied' }); 
+    return 
+  }
+  
+  res.json(await getSubDirectories(trimmedPath))
 }))
 
 // ============================================

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { AgentService } from '../agent-service.js'
+import type { WebSocketMessage } from '../types.js'
 
 describe('AgentService', () => {
   let service: AgentService
@@ -159,7 +160,7 @@ describe('AgentService Integration', () => {
       const sessionId = 'integration-test-1'
       await service.createSession(sessionId, { workDir: '/tmp' })
 
-      const messages: any[] = []
+      const messages: WebSocketMessage[] = []
 
       await service.streamMessage(
         sessionId,
@@ -177,7 +178,7 @@ describe('AgentService Integration', () => {
       const sessionId = 'integration-test-2'
       await service.createSession(sessionId, { workDir: '/tmp' })
 
-      const messages: any[] = []
+      const messages: WebSocketMessage[] = []
 
       // Start streaming
       const streamPromise = service.streamMessage(

@@ -3,10 +3,15 @@ import { authFetch } from '../lib/fetch'
 import type { Message, HistoryMessage, WsServerMessage } from '../types'
 import { logger } from '../lib/logger'
 
-let msgCounter = 0
-
-function nextMsgId() {
-  return `${Date.now()}-${msgCounter++}`
+/**
+ * 生成唯一消息ID
+ * 使用当前时间戳 + 随机字符串 + 性能计数器，确保ID唯一性
+ */
+function nextMsgId(): string {
+  const timestamp = Date.now()
+  const random = Math.random().toString(36).substring(2, 11)
+  const counter = performance.now().toString(36).substring(2, 8)
+  return `msg-${timestamp}-${random}-${counter}`
 }
 
 export function useMessages(_conversationId: string | null) {
@@ -89,22 +94,23 @@ export function useMessages(_conversationId: string | null) {
     switch (msg.type) {
       case 'stream': {
         const text = msg.data.delta?.text || ''
-        streamingContentRef.current += text
+        const newContent = streamingContentRef.current + text
+        streamingContentRef.current = newContent
 
         if (!streamingMsgIdRef.current) {
           const id = nextMsgId()
           streamingMsgIdRef.current = id
           setMessages(prev => [
             ...prev,
-            { id, role: 'assistant', content: streamingContentRef.current, type: 'text', timestamp: Date.now() },
+            { id, role: 'assistant', content: newContent, type: 'text', timestamp: Date.now() },
           ])
         } else {
-          const streamingId = streamingMsgIdRef.current
           setMessages(prev => {
+            const streamingId = streamingMsgIdRef.current
             const idx = prev.findIndex(m => m.id === streamingId)
             if (idx !== -1) {
               const updated = [...prev]
-              updated[idx] = { ...updated[idx], content: streamingContentRef.current }
+              updated[idx] = { ...updated[idx], content: newContent }
               return updated
             }
             return prev

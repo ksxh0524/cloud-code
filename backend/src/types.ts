@@ -8,7 +8,7 @@ export interface WebSocketMessage {
   /** 消息类型 */
   type: 'message' | 'stream' | 'tool_call' | 'tool_result' | 'thinking' | 'error' | 'done' | 'connected' | 'initialized'
   /** 消息数据内容 */
-  data: unknown
+  data: Record<string, unknown> | null
   /** 会话 ID（可选） */
   sessionId?: string
 }
@@ -57,8 +57,11 @@ export interface HistoryMessage {
 export const wsInitSchema = z.object({
   type: z.literal('init'),
   data: z.object({
-    /** 工作目录路径（可选，prompt 时会带真实路径） */
-    workDir: z.string().optional(),
+    /** 工作目录路径（可选，但必须提供绝对路径） */
+    workDir: z.string().refine(
+      (val) => !val || val.startsWith('/'),
+      { message: 'workDir must be an absolute path if provided' }
+    ).optional(),
     /** API 密钥（可选，用于认证） */
     apiKey: z.string().optional(),
   }),
@@ -75,8 +78,11 @@ export const wsPromptSchema = z.object({
   data: z.object({
     /** 用户输入的提示文本，必须非空 */
     prompt: z.string().min(1),
-    /** 工作目录路径，必须非空 */
-    workDir: z.string().min(1),
+    /** 工作目录路径，必须非空且为绝对路径 */
+    workDir: z.string().min(1).refine(
+      (val) => val.startsWith('/'),
+      { message: 'workDir must be an absolute path' }
+    ),
     /** 关联的会话 ID（可选） */
     conversationId: z.string().optional(),
     /** 历史消息列表（可选） */

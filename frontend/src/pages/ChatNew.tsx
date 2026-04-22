@@ -88,11 +88,12 @@ export default function ChatNew() {
   }, [connectionState])
 
   // 同步 WebSocket 的 sdkSessionId 到 messages hook
+  // 注意：只依赖 sdkSessionId，避免 messageSdkSessionId 变化导致循环
   useEffect(() => {
-    if (sdkSessionId && sdkSessionId !== messageSdkSessionId) {
+    if (sdkSessionId) {
       setMessageSdkSessionId(sdkSessionId)
     }
-  }, [sdkSessionId, messageSdkSessionId, setMessageSdkSessionId])
+  }, [sdkSessionId])
 
   // 监听连接状态变化
   useEffect(() => {

@@ -3,9 +3,18 @@ import styles from './EmptyState.module.css'
 interface EmptyStateProps {
   hasConversation: boolean
   onNewConversation: () => void
+  onSuggestionClick?: (suggestion: string) => void
 }
 
-export default function EmptyState({ hasConversation, onNewConversation }: EmptyStateProps) {
+export default function EmptyState({ hasConversation, onNewConversation, onSuggestionClick }: EmptyStateProps) {
+  const suggestions = ['帮我阅读这个项目的代码结构', '找出代码中的 Bug 并修复', '帮我重构这个模块']
+  
+  const handleSuggestionClick = (suggestion: string) => {
+    if (onSuggestionClick) {
+      onSuggestionClick(suggestion)
+    }
+  }
+  
   if (hasConversation) {
     return (
       <div className={styles.emptyChat}>
@@ -17,8 +26,8 @@ export default function EmptyState({ hasConversation, onNewConversation }: Empty
         <h2 className={styles.emptyChatTitle}>开始对话</h2>
         <p className={styles.emptyChatDesc}>输入消息开始使用 Cloud Code</p>
         <div className={styles.emptyChatSuggestions}>
-          {['帮我阅读这个项目的代码结构', '找出代码中的 Bug 并修复', '帮我重构这个模块'].map(text => (
-            <button key={text} className={styles.suggestionChip} onClick={() => {/* TODO: fill input */}}>
+          {suggestions.map(text => (
+            <button key={text} className={styles.suggestionChip} onClick={() => handleSuggestionClick(text)}>
               {text}
             </button>
           ))}

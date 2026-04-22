@@ -4,8 +4,10 @@ import type { Request, Response, NextFunction } from 'express'
 const API_KEY = process.env.API_KEY
 
 function safeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a)
-  const bufB = Buffer.from(b)
+  // 使用TextEncoder确保UTF-8编码一致性
+  const encoder = new TextEncoder()
+  const bufA = Buffer.from(encoder.encode(a))
+  const bufB = Buffer.from(encoder.encode(b))
   if (bufA.length !== bufB.length) return false
   return crypto.timingSafeEqual(bufA, bufB)
 }
@@ -16,10 +18,10 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
     return
   }
 
-  const headerKey = req.headers['x-api-key'] as string | undefined
+  const headerKey = (req.headers['x-api-key'] as string | undefined)?.trim()
 
   const bearerKey = req.headers.authorization?.startsWith('Bearer ')
-    ? req.headers.authorization.slice(7)
+    ? req.headers.authorization.slice(7).trim()
     : undefined
 
   if (

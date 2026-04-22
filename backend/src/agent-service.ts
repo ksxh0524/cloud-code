@@ -34,9 +34,42 @@ if (mcpServers) {
 
 export class AgentService {
   private sessions: Map<string, SessionData> = new Map()
+  private readonly MAX_SESSIONS = 1000
+  private sessionAccessTimes: Map<string, number> = new Map()
+
+  private enforceSessionLimit(): void {
+    if (this.sessions.size < this.MAX_SESSIONS) return
+    
+    // LRU淘汰：找出最久未访问的会话
+    const sortedSessions = Array.from(this.sessionAccessTimes.entries())
+      .sort((a, b) => a[1] - b[1])
+    
+    const sessionsToRemove = sortedSessions.slice(0, Math.ceil(this.MAX_SESSIONS * 0.1))
+    
+    for (const [sessionId] of sessionsToRemove) {
+      logger.warn({ sessionId }, 'Session evicted due to limit')
+      this.closeSession(sessionId).catch(err => {
+        logger.error({ err, sessionId }, 'Failed to evict session')
+      })
+    }
+  }
+
+  private updateAccessTime(sessionId: string): void {
+    this.sessionAccessTimes.set(sessionId, Date.now())
+  }
 
   async createSession(sessionId: string, config: AgentConfig): Promise<void> {
+    // 检查重复sessionId
+    const existing = this.sessions.get(sessionId)
+    if (existing) {
+      await this.closeSession(sessionId)
+    }
+    
+    // 强制执行会话数量限制
+    this.enforceSessionLimit()
+    
     this.sessions.set(sessionId, { query: null, config, history: [] })
+    this.updateAccessTime(sessionId)
   }
 
   updateSessionHistory(sessionId: string, history: HistoryMessage[]): void {
@@ -128,8 +161,9 @@ export class AgentService {
       mcpServerCount: mcpServers ? Object.keys(mcpServers).length : 0,
     }, 'Starting agent stream')
 
+    // 使用Map存储工具调用，避免数组顺序问题
     let toolIdCounter = 0
-    const pendingTools: Array<{ toolId: string; toolName: string }> = []
+    const pendingTools = new Map<string, { toolId: string; toolName: string }>()
     let sdkSessionId: string | undefined
 
     try {
@@ -162,12 +196,14 @@ export class AgentService {
               const toolId = `tool-${++toolIdCounter}`
               const toolName = String((wsMsg.data as Record<string, unknown>).toolName || '')
               ;(wsMsg.data as Record<string, unknown>).toolId = toolId
-              pendingTools.push({ toolId, toolName })
+              // 使用工具名称作为key存储
+              pendingTools.set(toolName, { toolId, toolName })
             } else if (wsMsg.type === 'tool_result') {
-              const pending = pendingTools.shift()
+              const toolName = String((wsMsg.data as Record<string, unknown>).toolName || '')
+              const pending = pendingTools.get(toolName)
               if (pending) {
+                pendingTools.delete(toolName)
                 ;(wsMsg.data as Record<string, unknown>).toolId = pending.toolId
-                ;(wsMsg.data as Record<string, unknown>).toolName = pending.toolName
               }
             }
             onMessage(wsMsg)
@@ -197,7 +233,7 @@ export class AgentService {
   private convertToWebSocketMessages(
     message: SDKMessage,
     sessionId: string,
-    pendingTools: Array<{ toolId: string; toolName: string }>,
+    pendingTools: Map<string, { toolId: string; toolName: string }>,
   ): WebSocketMessage[] {
     const raw = message as Record<string, unknown>
     const msgType = raw.type as string

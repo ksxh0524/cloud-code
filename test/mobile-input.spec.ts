@@ -21,8 +21,8 @@ test.describe('Mobile Input Box', () => {
           appearance: cs.appearance,
         }
       })
-      console.log('Textarea styles:', JSON.stringify(styles, null, 2))
       
+      // 移除调试输出，使用expect验证代替
       // Background should be a light color (not black/transparent)
       expect(styles.backgroundColor).not.toBe('rgb(0, 0, 0)')
       // Should have no border

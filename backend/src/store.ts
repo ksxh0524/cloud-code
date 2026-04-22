@@ -74,18 +74,37 @@ const DEFAULT_CONFIG: AppConfig = {
 /** 写入锁状态 */
 let writeLock = false
 /** 写入队列 */
-let writeQueue: (() => void)[] = []
+let writeQueue: Array<{ resolve: () => void; reject: (err: Error) => void; timer: NodeJS.Timeout }> = []
+
+const MAX_QUEUE_SIZE = 100
+const LOCK_TIMEOUT_MS = 30000
 
 /**
  * 获取写入锁
  * @returns Promise<void>
+ * @throws Error 当队列已满或获取超时时
  */
 function acquireLock(): Promise<void> {
   if (!writeLock) {
     writeLock = true
     return Promise.resolve()
   }
-  return new Promise<void>(resolve => writeQueue.push(resolve))
+  
+  if (writeQueue.length >= MAX_QUEUE_SIZE) {
+    return Promise.reject(new Error('Lock queue full - too many concurrent operations'))
+  }
+  
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const idx = writeQueue.findIndex(item => item.resolve === resolve)
+      if (idx !== -1) {
+        writeQueue.splice(idx, 1)
+      }
+      reject(new Error('Lock acquisition timeout'))
+    }, LOCK_TIMEOUT_MS)
+    
+    writeQueue.push({ resolve, reject, timer })
+  })
 }
 
 /**
@@ -94,7 +113,8 @@ function acquireLock(): Promise<void> {
 function releaseLock(): void {
   if (writeQueue.length > 0) {
     const next = writeQueue.shift()!
-    next()
+    clearTimeout(next.timer)
+    next.resolve()
   } else {
     writeLock = false
   }
@@ -114,8 +134,9 @@ async function loadData(): Promise<StoreData> {
   try {
     const content = await readFileAsync(DATA_FILE, 'utf-8')
     return JSON.parse(content)
-  } catch (err: any) {
-    if (err?.code !== 'ENOENT') {
+  } catch (err) {
+    const nodeError = err as NodeJS.ErrnoException
+    if (nodeError.code !== 'ENOENT') {
       logger.error({ err, file: DATA_FILE }, 'Failed to parse data file, resetting to defaults')
     }
   }
@@ -263,8 +284,12 @@ export async function deleteConversation(id: string): Promise<boolean> {
     store.conversations = store.conversations.filter(c => c.id !== id)
     const deleted = store.conversations.length < before
     if (deleted) {
-      void deleteMessages(id)
-      logger.info({ convId: id }, 'Conversation deleted')
+      // 异步删除消息，不等待完成
+      deleteMessages(id).then(() => {
+        logger.info({ convId: id }, 'Conversation and messages deleted')
+      }).catch(err => {
+        logger.error({ err, convId: id }, 'Failed to delete messages, but conversation was deleted')
+      })
     }
     return { result: deleted, store }
   })
@@ -354,13 +379,29 @@ export function addAllowedRoot(root: string): void {
 
 /**
  * 检查路径是否允许访问
+ * 使用更严格的验证防止路径遍历攻击
  *
  * @param dirPath - 要检查的路径
  * @returns boolean - 是否允许访问
  */
 export function isPathAllowed(dirPath: string): boolean {
   const resolved = resolve(dirPath)
-  return ALLOWED_ROOTS.some(root => resolved === root || resolved.startsWith(root + '/'))
+  
+  // 检查路径中是否包含 .. 序列
+  if (dirPath.includes('..')) {
+    return false
+  }
+  
+  // 确保解析后的路径是绝对路径
+  if (!resolved.startsWith('/')) {
+    return false
+  }
+  
+  return ALLOWED_ROOTS.some(root => {
+    const normalizedRoot = resolve(root)
+    // 确保是精确匹配或以根目录开头
+    return resolved === normalizedRoot || resolved.startsWith(normalizedRoot + '/')
+  })
 }
 
 /**
@@ -433,8 +474,9 @@ export async function loadMessages(conversationId: string): Promise<StoredMessag
   try {
     const content = await readFileAsync(filePath, 'utf-8')
     return JSON.parse(content)
-  } catch (err: any) {
-    if (err?.code === 'ENOENT') return []
+  } catch (err) {
+    const nodeError = err as NodeJS.ErrnoException
+    if (nodeError.code === 'ENOENT') return []
     logger.error({ err, conversationId }, 'Failed to parse messages file')
     return []
   }
@@ -467,8 +509,9 @@ export async function deleteMessages(conversationId: string): Promise<void> {
   const filePath = messageFilePath(conversationId)
   try {
     await unlink(filePath)
-  } catch (err: any) {
-    if (err?.code !== 'ENOENT') {
+  } catch (err) {
+    const nodeError = err as NodeJS.ErrnoException
+    if (nodeError.code !== 'ENOENT') {
       logger.error({ err, conversationId }, 'Failed to delete messages file')
     }
   }

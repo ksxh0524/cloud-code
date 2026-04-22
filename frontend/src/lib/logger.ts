@@ -51,11 +51,14 @@ class FrontendLogger {
     this.loadFromStorage()
   }
 
+  private idCounter = 0
+  
   /**
    * 生成唯一 ID
+   * 使用递增计数器确保同一毫秒内生成的ID唯一
    */
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    return `${Date.now()}-${++this.idCounter}-${Math.random().toString(36).substr(2, 5)}`
   }
 
   /**
@@ -66,10 +69,19 @@ class FrontendLogger {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
-        this.logs = JSON.parse(stored)
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed)) {
+          this.logs = parsed
+        } else {
+          console.warn('[Logger] Invalid log storage format, resetting')
+        }
       }
-    } catch {
-      // 忽略存储错误
+    } catch (err) {
+      console.warn('[Logger] Failed to load logs from storage:', err)
+      // 清除可能损坏的数据
+      try {
+        localStorage.removeItem(STORAGE_KEY)
+      } catch {}
     }
   }
 
@@ -79,9 +91,18 @@ class FrontendLogger {
   private saveToStorage(): void {
     if (!this.options.persistToStorage) return
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.logs.slice(-100)))
-    } catch {
-      // 忽略存储错误
+      const logsToSave = this.logs.slice(-Math.min(this.options.maxLogs, 100))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(logsToSave))
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'QuotaExceededError') {
+        // 存储空间不足，尝试保存更少的数据
+        try {
+          const logsToSave = this.logs.slice(-50)
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(logsToSave))
+        } catch (innerErr) {
+          console.warn('[Logger] Failed to save logs even with reduced size:', innerErr)
+        }
+      }
     }
   }
 
@@ -248,13 +269,22 @@ class FrontendLogger {
     const content = format === 'json' ? this.exportToJson() : this.exportToText()
     const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/plain' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `cloud-code-logs-${new Date().toISOString().split('T')[0]}.${format}`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    
+    try {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `cloud-code-logs-${new Date().toISOString().split('T')[0]}.${format}`
+      
+      // 使用 MouseEvent 代替 click()，更可控
+      const event = new MouseEvent('click', {
+        bubbles: false,
+        cancelable: true,
+        view: window
+      })
+      a.dispatchEvent(event)
+    } finally {
+      URL.revokeObjectURL(url)
+    }
   }
 
   /**

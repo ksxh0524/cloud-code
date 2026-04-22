@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import styles from './Toast.module.css'
 
 export interface ToastItem {
@@ -43,11 +43,14 @@ const iconMap: Record<ToastItem['type'], string> = {
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
-  const fnRef = useRef<(t: ToastItem[]) => void>(undefined)
-  if (!fnRef.current) {
-    fnRef.current = (t: ToastItem[]) => setToasts(t)
-    listeners.add(fnRef.current)
-  }
+  useEffect(() => {
+    const listener = (t: ToastItem[]) => setToasts(t)
+    listeners.add(listener)
+    
+    return () => {
+      listeners.delete(listener)
+    }
+  }, [])
 
   if (toasts.length === 0) return null
 
