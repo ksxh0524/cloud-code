@@ -147,7 +147,7 @@ describe('AgentService', () => {
 
 // Integration tests that require actual SDK connection
 describe('AgentService Integration', () => {
-  const hasApiCredentials = process.env.ANTHROPIC_BASE_URL && process.env.ANTHROPIC_AUTH_TOKEN
+  const hasApiCredentials = process.env.ANTHROPIC_BASE_URL && process.env.ANTHROPIC_AUTH_TOKEN && process.env.RUN_INTEGRATION_TESTS === '1'
 
   ;(hasApiCredentials ? describe : describe.skip)('with API credentials', () => {
     let service: AgentService

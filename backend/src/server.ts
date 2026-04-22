@@ -203,7 +203,7 @@ wss.on('connection', (ws: WebSocket) => {
 
       const parseResult = wsMessageSchema.safeParse(raw)
       if (!parseResult.success) {
-        logger.warn({ sessionId, error: parseResult.error.errors }, 'Invalid message format')
+        logger.warn({ sessionId, error: parseResult.error.issues }, 'Invalid message format')
         safeSend(ws, { type: 'error', data: 'Invalid message format', sessionId })
         return
       }
