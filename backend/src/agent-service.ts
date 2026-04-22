@@ -1,15 +1,13 @@
-import { resolve, join } from 'path'
-import { homedir } from 'os'
-import { query, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { spawn, type ChildProcess } from 'child_process'
+import { createInterface } from 'readline'
 import type { AgentConfig, WebSocketMessage, HistoryMessage } from './types.js'
 import { logger } from './logger.js'
 
 interface SessionData {
-  query: Query | null
+  process: ChildProcess | null
   config: AgentConfig
   sdkSessionId?: string
   history: HistoryMessage[]
-  abortController?: AbortController
 }
 
 export class AgentService {
@@ -19,13 +17,12 @@ export class AgentService {
 
   private enforceSessionLimit(): void {
     if (this.sessions.size < this.MAX_SESSIONS) return
-    
-    // LRU淘汰：找出最久未访问的会话
+
     const sortedSessions = Array.from(this.sessionAccessTimes.entries())
       .sort((a, b) => a[1] - b[1])
-    
+
     const sessionsToRemove = sortedSessions.slice(0, Math.ceil(this.MAX_SESSIONS * 0.1))
-    
+
     for (const [sessionId] of sessionsToRemove) {
       logger.warn({ sessionId }, 'Session evicted due to limit')
       this.closeSession(sessionId).catch(err => {
@@ -39,16 +36,14 @@ export class AgentService {
   }
 
   async createSession(sessionId: string, config: AgentConfig): Promise<void> {
-    // 检查重复sessionId
     const existing = this.sessions.get(sessionId)
     if (existing) {
       await this.closeSession(sessionId)
     }
-    
-    // 强制执行会话数量限制
+
     this.enforceSessionLimit()
-    
-    this.sessions.set(sessionId, { query: null, config, history: [] })
+
+    this.sessions.set(sessionId, { process: null, config, history: [] })
     this.updateAccessTime(sessionId)
   }
 
@@ -69,180 +64,251 @@ export class AgentService {
     prompt: string,
     config: AgentConfig,
     onMessage: (msg: WebSocketMessage) => void,
-    history?: HistoryMessage[]
+    _history?: HistoryMessage[],
   ): Promise<void> {
     const stored = this.sessions.get(sessionId)
-    const baseConfig = stored?.config ?? config
-    const mergedConfig = { ...baseConfig, ...config }
+    const mergedConfig = { ...(stored?.config ?? {}), ...config }
+
+    // 构建 CLI 参数
+    const args = [
+      '-p',
+      '--output-format', 'stream-json',
+      '--include-partial-messages',
+    ]
+
+    if (mergedConfig.sdkSessionId) {
+      args.push('--resume', mergedConfig.sdkSessionId)
+    }
+    if (mergedConfig.model) {
+      args.push('--model', mergedConfig.model)
+    }
+    if (mergedConfig.effort) {
+      args.push('--effort', mergedConfig.effort)
+    }
+    if (mergedConfig.permissionMode) {
+      args.push('--permission-mode', mergedConfig.permissionMode)
+    }
+    if (mergedConfig.systemPrompt && typeof mergedConfig.systemPrompt === 'string') {
+      args.push('--system-prompt', mergedConfig.systemPrompt)
+    }
+    if (mergedConfig.maxBudgetUsd != null) {
+      args.push('--max-budget-usd', String(mergedConfig.maxBudgetUsd))
+    }
+    if (mergedConfig.maxTurns) {
+      args.push('--max-turns', String(mergedConfig.maxTurns))
+    }
+    if (mergedConfig.allowedTools?.length) {
+      args.push('--allowedTools', ...mergedConfig.allowedTools)
+    }
+    if (mergedConfig.disallowedTools?.length) {
+      args.push('--disallowedTools', ...mergedConfig.disallowedTools)
+    }
+    if (mergedConfig.additionalDirectories?.length) {
+      args.push('--add-dir', ...mergedConfig.additionalDirectories)
+    }
+
+    args.push(prompt)
 
     const env: Record<string, string | undefined> = { ...process.env }
     if (mergedConfig.env) {
       Object.assign(env, mergedConfig.env)
     }
 
-    const buildPrompt = async function* () {
-      // SDK resume 模式下跳过历史回放，避免消息重复
-      const skipHistory = !!mergedConfig.sdkSessionId
-
-      if (!skipHistory && history && history.length > 0) {
-        for (const msg of history) {
-          if (msg.role === 'user') {
-            yield {
-              type: 'user' as const,
-              message: { role: 'user' as const, content: msg.content },
-            } as SDKUserMessage
-          } else if (msg.role === 'assistant') {
-            yield {
-              type: 'user' as const,
-              message: {
-                role: 'assistant' as const,
-                content: [{ type: 'text' as const, text: msg.content }],
-              },
-            } as unknown as SDKUserMessage
-          }
-        }
-      }
-      yield {
-        type: 'user' as const,
-        message: { role: 'user' as const, content: prompt },
-      } as SDKUserMessage
-    }
-
-    const options: Record<string, unknown> = {
-      cwd: mergedConfig.workDir,
-      env,
-      allowedTools: mergedConfig.allowedTools || ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep'],
-      permissionMode: mergedConfig.permissionMode || 'bypassPermissions',
-      maxTurns: mergedConfig.maxTurns || 50,
-      persistSession: true,
-      includePartialMessages: true,
-      settingSources: ['user', 'project'],
-      stderr: (data: string) => {
-        logger.error({ sessionId, stderr: data.trim() }, 'Claude process stderr')
-      },
-    }
-
-    if (mergedConfig.sdkSessionId) {
-      options.resume = mergedConfig.sdkSessionId
-      logger.debug({ sessionId, sdkSessionId: mergedConfig.sdkSessionId }, 'Resuming SDK session')
-    }
-
-    const abortController = new AbortController()
-    options.abortController = abortController
-
     logger.info({
       sessionId,
       workDir: mergedConfig.workDir,
-      hasHistory: !!history && history.length > 0,
-      historyLength: history?.length || 0,
       resumeSession: !!mergedConfig.sdkSessionId,
-    }, 'Starting agent stream')
+      model: mergedConfig.model,
+      args: args.filter(a => !a.includes('\n')).join(' ').slice(0, 200),
+    }, 'Starting claude CLI')
 
-    // 使用Map存储工具调用，避免数组顺序问题
+    const proc = spawn('claude', args, {
+      cwd: mergedConfig.workDir,
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+
+    // 更新 session 数据
+    this.sessions.set(sessionId, {
+      process: proc,
+      config: mergedConfig,
+      history: _history || [],
+      sdkSessionId: mergedConfig.sdkSessionId,
+    })
+    this.updateAccessTime(sessionId)
+
+    // 工具调用追踪
     let toolIdCounter = 0
     const pendingTools = new Map<string, { toolId: string; toolName: string }>()
     let sdkSessionId: string | undefined
 
-    try {
-      const existing = this.sessions.get(sessionId)
-      if (existing?.query) {
-        await existing.query.close?.()
-      }
-
-      const queryIterator = query({ prompt: buildPrompt(), options })
-      this.sessions.set(sessionId, {
-        query: queryIterator,
-        config: mergedConfig,
-        history: history || [],
-        sdkSessionId: mergedConfig.sdkSessionId,
-        abortController,
-      })
-
+    // 逐行读取 NDJSON 输出
+    const rl = createInterface({ input: proc.stdout! })
+    rl.on('line', (line) => {
+      if (!line.trim()) return
       try {
-        for await (const message of queryIterator) {
-          const msgWithSession = message as Record<string, unknown>
-          if (msgWithSession.session_id && typeof msgWithSession.session_id === 'string') {
-            sdkSessionId = msgWithSession.session_id
-            const session = this.sessions.get(sessionId)
-            if (session) session.sdkSessionId = sdkSessionId
-          }
+        const msg = JSON.parse(line) as Record<string, unknown>
 
-          const wsMsgs = this.convertToWebSocketMessages(message, sessionId, pendingTools)
-          for (const wsMsg of wsMsgs) {
-            if (wsMsg.type === 'tool_call') {
-              const toolId = `tool-${++toolIdCounter}`
-              const toolName = String((wsMsg.data as Record<string, unknown>).toolName || '')
-              const sdkToolUseId = String((wsMsg.data as Record<string, unknown>).sdkToolUseId || toolId)
-              ;(wsMsg.data as Record<string, unknown>).toolId = toolId
-              // 使用 SDK tool_use_id 作为 key，避免同名工具冲突
-              pendingTools.set(sdkToolUseId, { toolId, toolName })
-            } else if (wsMsg.type === 'tool_result') {
-              const sdkToolUseId = String((wsMsg.data as Record<string, unknown>).sdkToolUseId || '')
-              const pending = sdkToolUseId ? pendingTools.get(sdkToolUseId) : Array.from(pendingTools.values())[0]
-              if (pending) {
-                pendingTools.delete(sdkToolUseId || pending.toolId)
-                ;(wsMsg.data as Record<string, unknown>).toolId = pending.toolId
-              }
+        // 捕获 session_id
+        if (msg.session_id && typeof msg.session_id === 'string') {
+          sdkSessionId = msg.session_id
+          const session = this.sessions.get(sessionId)
+          if (session) session.sdkSessionId = sdkSessionId
+        }
+
+        const wsMsgs = this.convertCliMessage(msg, sessionId)
+        // 更新 toolIdCounter（convertCliMessage 内部可能递增）
+        for (const wsMsg of wsMsgs) {
+          if (wsMsg.type === 'tool_call') {
+            const data = wsMsg.data as Record<string, unknown>
+            const toolId = `tool-${++toolIdCounter}`
+            const sdkToolUseId = String(data.sdkToolUseId || toolId)
+            data.toolId = toolId
+            pendingTools.set(sdkToolUseId, { toolId, toolName: String(data.toolName || '') })
+          } else if (wsMsg.type === 'tool_result') {
+            const data = wsMsg.data as Record<string, unknown>
+            const sdkToolUseId = String(data.sdkToolUseId || '')
+            const pending = sdkToolUseId ? pendingTools.get(sdkToolUseId) : Array.from(pendingTools.values())[0]
+            if (pending) {
+              pendingTools.delete(sdkToolUseId || pending.toolId)
+              data.toolId = pending.toolId
             }
-            onMessage(wsMsg)
           }
+          onMessage(wsMsg)
         }
-      } finally {
-        // 确保 query 被清理
-        const current = this.sessions.get(sessionId)
-        if (current?.query === queryIterator) {
-          current.query = null
-          current.abortController = undefined
-        }
+      } catch (err) {
+        logger.debug({ err, line: line.slice(0, 200) }, 'Failed to parse CLI NDJSON line')
       }
+    })
 
-      onMessage({ type: 'done', data: { sdkSessionId }, sessionId })
-      logger.info({ sessionId, sdkSessionId }, 'Stream completed')
-    } catch (error) {
-      logger.error({ err: error, sessionId }, 'Stream error')
-      onMessage({
-        type: 'error',
-        data: { message: error instanceof Error ? error.message : 'Unknown error' },
-        sessionId,
+    // 捕获 stderr
+    proc.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString().trim()
+      if (text) {
+        logger.error({ sessionId, stderr: text }, 'Claude CLI stderr')
+      }
+    })
+
+    // 等待进程结束
+    return new Promise((resolve) => {
+      proc.on('close', (code) => {
+        const session = this.sessions.get(sessionId)
+        if (session?.process === proc) {
+          session.process = null
+        }
+
+        if (code !== 0 && code !== null) {
+          logger.warn({ sessionId, exitCode: code }, 'Claude CLI exited with non-zero code')
+        }
+
+        onMessage({ type: 'done', data: { sdkSessionId }, sessionId })
+        logger.info({ sessionId, sdkSessionId, exitCode: code }, 'CLI stream completed')
+        resolve()
       })
-    }
+
+      proc.on('error', (err) => {
+        logger.error({ err, sessionId }, 'Failed to spawn claude CLI')
+        onMessage({
+          type: 'error',
+          data: { message: `Failed to start claude: ${err.message}` },
+          sessionId,
+        })
+        onMessage({ type: 'done', data: { sdkSessionId }, sessionId })
+        resolve()
+      })
+    })
   }
 
-  private convertToWebSocketMessages(
-    message: SDKMessage,
+  /**
+   * 将 CLI stream-json NDJSON 消息转换为 WebSocket 消息
+   * CLI --output-format stream-json 输出格式:
+   *   system      → init/status 元信息
+   *   stream_event → Anthropic 原始 SSE 事件（text_delta, thinking_delta, tool_use 等）
+   *   assistant   → 完整 assistant 消息（含 content blocks）
+   *   user        → 完整 user 消息（含 tool_result）
+   *   result      → 最终结果（cost, usage）
+   */
+  private convertCliMessage(
+    msg: Record<string, unknown>,
     sessionId: string,
-    pendingTools: Map<string, { toolId: string; toolName: string }>,
   ): WebSocketMessage[] {
-    const raw = message as Record<string, unknown>
-    const msgType = raw.type as string
+    const msgType = msg.type as string
 
-    if (msgType === 'system' || msgType === 'result') return []
-
-    // Partial assistant message → token-level streaming
-    if (msgType === 'assistant_partial') {
-      const delta = raw.delta as Record<string, unknown> | undefined
-      if (!delta) return []
-
-      const deltaType = delta.type as string
-      if (deltaType === 'text_delta') {
-        return [{
-          type: 'stream',
-          data: { delta: { text: String(delta.text || '') } },
-          sessionId,
-        }]
-      }
-      if (deltaType === 'thinking_delta') {
-        return [{
-          type: 'thinking',
-          data: { content: String(delta.thinking || ''), partial: true },
-          sessionId,
-        }]
-      }
+    // system init — 仅记录日志
+    if (msgType === 'system') {
+      logger.debug({
+        sessionId,
+        cliSessionId: msg.session_id,
+        model: msg.model,
+        tools: (msg.tools as string[])?.length,
+        mcpServers: (msg.mcp_servers as unknown[])?.length,
+      }, 'CLI session initialized')
       return []
     }
 
+    // result — 提取 usage 和 cost
+    if (msgType === 'result') {
+      return [{
+        type: 'usage' as const,
+        data: {
+          costUSD: msg.total_cost_usd,
+          durationMs: msg.duration_ms,
+          numTurns: msg.num_turns,
+          inputTokens: (msg.usage as Record<string, unknown>)?.input_tokens,
+          outputTokens: (msg.usage as Record<string, unknown>)?.output_tokens,
+        },
+        sessionId,
+      }]
+    }
+
+    // stream_event → Anthropic 原始 SSE 事件，需要解包
+    if (msgType === 'stream_event') {
+      const event = msg.event as Record<string, unknown> | undefined
+      if (!event) return []
+
+      const eventType = event.type as string
+      const delta = event.delta as Record<string, unknown> | undefined
+
+      if (eventType === 'content_block_delta' && delta) {
+        const deltaType = delta.type as string
+        if (deltaType === 'text_delta') {
+          return [{
+            type: 'stream',
+            data: { delta: { text: String(delta.text || '') } },
+            sessionId,
+          }]
+        }
+        if (deltaType === 'thinking_delta') {
+          return [{
+            type: 'thinking',
+            data: { content: String(delta.thinking || ''), partial: true },
+            sessionId,
+          }]
+        }
+        // tool_use 的 input_json_delta — 暂不处理，等完整 tool_use 消息
+      }
+
+      // message_delta 中有 usage 信息
+      if (eventType === 'message_delta' && delta) {
+        const usage = event.usage as Record<string, unknown> | undefined
+        if (usage) {
+          return [{
+            type: 'usage' as const,
+            data: {
+              inputTokens: usage.input_tokens,
+              outputTokens: usage.output_tokens,
+            },
+            sessionId,
+          }]
+        }
+      }
+
+      return []
+    }
+
+    // assistant 完整消息
     if (msgType === 'assistant') {
-      const inner = raw.message as Record<string, unknown> | undefined
+      const inner = msg.message as Record<string, unknown> | undefined
       if (!inner) return []
       const blocks = inner.content as Record<string, unknown>[] | undefined
       if (!Array.isArray(blocks)) return []
@@ -259,7 +325,11 @@ export class AgentService {
         } else if (bType === 'tool_use') {
           results.push({
             type: 'tool_call',
-            data: { toolName: block.name, toolInput: block.input, sdkToolUseId: String(block.id || '') },
+            data: {
+              toolName: block.name,
+              toolInput: block.input,
+              sdkToolUseId: String(block.id || ''),
+            },
             sessionId,
           })
         } else if (bType === 'text') {
@@ -273,8 +343,9 @@ export class AgentService {
       return results
     }
 
+    // user 消息（工具结果）
     if (msgType === 'user') {
-      const inner = raw.message as Record<string, unknown> | undefined
+      const inner = msg.message as Record<string, unknown> | undefined
       if (!inner) return []
       const blocks = inner.content as Record<string, unknown>[] | undefined
       if (!Array.isArray(blocks)) return []
@@ -282,11 +353,16 @@ export class AgentService {
       const results: WebSocketMessage[] = []
       for (const block of blocks) {
         if (block.type === 'tool_result') {
-          const toolOutput = typeof block.content === 'string' ? block.content : JSON.stringify(block.content)
-          const sdkToolUseId = String(block.tool_use_id || '')
+          const toolOutput = typeof block.content === 'string'
+            ? block.content
+            : JSON.stringify(block.content)
           results.push({
             type: 'tool_result',
-            data: { toolName: String(block.name || ''), toolOutput, sdkToolUseId },
+            data: {
+              toolName: String(block.name || ''),
+              toolOutput,
+              sdkToolUseId: String(block.tool_use_id || ''),
+            },
             sessionId,
           })
         }
@@ -300,8 +376,9 @@ export class AgentService {
   async closeSession(sessionId: string): Promise<{ sdkSessionId?: string, history: HistoryMessage[] } | null> {
     const session = this.sessions.get(sessionId)
     if (session) {
-      session.abortController?.abort()
-      await session.query?.close?.()
+      if (session.process && !session.process.killed) {
+        session.process.kill('SIGTERM')
+      }
       const result = {
         sdkSessionId: session.sdkSessionId,
         history: session.history,
@@ -317,10 +394,9 @@ export class AgentService {
   interruptSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    if (session.query && typeof session.query.interrupt === 'function') {
-      session.query.interrupt()
+    if (session.process && !session.process.killed) {
+      session.process.kill('SIGINT')
     }
-    session.abortController?.abort()
   }
 }
 

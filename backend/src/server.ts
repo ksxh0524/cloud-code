@@ -211,7 +211,7 @@ wss.on('connection', (ws: WebSocket) => {
 
       switch (message.type) {
         case 'init': {
-          const { workDir, apiKey } = message.data || {}
+          const { workDir, apiKey, ...configOverrides } = message.data || {}
 
           // WebSocket 认证
           if (!validateApiKey(apiKey)) {
@@ -239,6 +239,7 @@ wss.on('connection', (ws: WebSocket) => {
           const config: AgentConfig = {
             workDir,
             env,
+            ...configOverrides,
           }
 
           await agentService.createSession(sessionId, config)
@@ -264,7 +265,7 @@ wss.on('connection', (ws: WebSocket) => {
           }
           isProcessing = true
 
-          const { prompt, workDir, conversationId, history, sdkSessionId: existingSdkSessionId } = message.data
+          const { prompt, workDir, conversationId, history, sdkSessionId: existingSdkSessionId, ...configOverrides } = message.data
 
           // 路径安全检查
           if (!isPathAllowed(workDir)) {
