@@ -3,6 +3,10 @@ import type { Request, Response, NextFunction } from 'express'
 
 const API_KEY = process.env.API_KEY
 
+export function isAuthEnabled(): boolean {
+  return !!API_KEY
+}
+
 function safeEqual(a: string, b: string): boolean {
   // 使用TextEncoder确保UTF-8编码一致性
   const encoder = new TextEncoder()

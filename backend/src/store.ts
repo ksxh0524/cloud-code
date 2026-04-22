@@ -137,7 +137,15 @@ async function loadData(): Promise<StoreData> {
   } catch (err) {
     const nodeError = err as NodeJS.ErrnoException
     if (nodeError.code !== 'ENOENT') {
-      logger.error({ err, file: DATA_FILE }, 'Failed to parse data file, resetting to defaults')
+      logger.error({ err, file: DATA_FILE }, 'Failed to parse data file')
+      // 备份损坏文件以防数据丢失
+      const backupPath = DATA_FILE + `.corrupt.${Date.now()}`
+      try {
+        await rename(DATA_FILE, backupPath)
+        logger.info({ backupPath }, 'Backed up corrupted data file')
+      } catch (backupErr) {
+        logger.error({ err: backupErr }, 'Failed to backup corrupted data file')
+      }
     }
   }
   return { conversations: [], config: { ...DEFAULT_CONFIG } }
@@ -252,9 +260,10 @@ export async function updateConversation(
   return withLock(store => {
     const idx = store.conversations.findIndex(c => c.id === id)
     if (idx === -1) return { result: null, store }
-    store.conversations[idx] = { ...store.conversations[idx], ...updates, updatedAt: new Date().toISOString() }
+    const existing = store.conversations[idx]!
+    store.conversations[idx] = { ...existing, ...updates, updatedAt: new Date().toISOString() }
     logger.info({ convId: id }, 'Conversation updated')
-    return { result: store.conversations[idx], store }
+    return { result: store.conversations[idx]!, store }
   })
 }
 
@@ -265,7 +274,7 @@ export async function touchConversation(id: string): Promise<void> {
   await withLock(store => {
     const idx = store.conversations.findIndex(c => c.id === id)
     if (idx !== -1) {
-      store.conversations[idx].updatedAt = new Date().toISOString()
+      store.conversations[idx]!.updatedAt = new Date().toISOString()
     }
     return { result: undefined, store }
   })
@@ -450,7 +459,7 @@ export interface StoredMessage {
   timestamp: number
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function validateConversationId(id: string): void {
   if (!UUID_RE.test(id)) {

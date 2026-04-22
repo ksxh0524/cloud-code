@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+export const WS_PROTOCOL_VERSION = 1
+
 /**
  * WebSocket 消息类型定义
  * 用于前后端通信的消息格式

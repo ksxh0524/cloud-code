@@ -195,14 +195,15 @@ export class AgentService {
             if (wsMsg.type === 'tool_call') {
               const toolId = `tool-${++toolIdCounter}`
               const toolName = String((wsMsg.data as Record<string, unknown>).toolName || '')
+              const sdkToolUseId = String((wsMsg.data as Record<string, unknown>).sdkToolUseId || toolId)
               ;(wsMsg.data as Record<string, unknown>).toolId = toolId
-              // 使用工具名称作为key存储
-              pendingTools.set(toolName, { toolId, toolName })
+              // 使用 SDK tool_use_id 作为 key，避免同名工具冲突
+              pendingTools.set(sdkToolUseId, { toolId, toolName })
             } else if (wsMsg.type === 'tool_result') {
-              const toolName = String((wsMsg.data as Record<string, unknown>).toolName || '')
-              const pending = pendingTools.get(toolName)
+              const sdkToolUseId = String((wsMsg.data as Record<string, unknown>).sdkToolUseId || '')
+              const pending = sdkToolUseId ? pendingTools.get(sdkToolUseId) : Array.from(pendingTools.values())[0]
               if (pending) {
-                pendingTools.delete(toolName)
+                pendingTools.delete(sdkToolUseId || pending.toolId)
                 ;(wsMsg.data as Record<string, unknown>).toolId = pending.toolId
               }
             }
@@ -281,7 +282,7 @@ export class AgentService {
         } else if (bType === 'tool_use') {
           results.push({
             type: 'tool_call',
-            data: { toolName: block.name, toolInput: block.input },
+            data: { toolName: block.name, toolInput: block.input, sdkToolUseId: String(block.id || '') },
             sessionId,
           })
         } else if (bType === 'text') {
@@ -305,15 +306,10 @@ export class AgentService {
       for (const block of blocks) {
         if (block.type === 'tool_result') {
           const toolOutput = typeof block.content === 'string' ? block.content : JSON.stringify(block.content)
-          // 获取第一个 pending tool（按插入顺序）
-          const pendingEntries = Array.from(pendingTools.entries())
-          const firstPending = pendingEntries[0]
-          if (firstPending) {
-            pendingTools.delete(firstPending[0])
-          }
+          const sdkToolUseId = String(block.tool_use_id || '')
           results.push({
             type: 'tool_result',
-            data: { toolName: firstPending?.[1]?.toolName || String(block.name || ''), toolOutput },
+            data: { toolName: String(block.name || ''), toolOutput, sdkToolUseId },
             sessionId,
           })
         }
@@ -334,6 +330,7 @@ export class AgentService {
         history: session.history,
       }
       this.sessions.delete(sessionId)
+      this.sessionAccessTimes.delete(sessionId)
       logger.info({ sessionId, sdkSessionId: result.sdkSessionId }, 'Session closed')
       return result
     }

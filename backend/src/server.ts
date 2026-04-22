@@ -8,10 +8,10 @@ import { v4 as uuidv4 } from 'uuid'
 import { agentService } from './agent-service.js'
 import { router } from './routes.js'
 import { logger } from './logger.js'
-import { saveMessages, touchConversation, updateConversation, type StoredMessage, isPathAllowed } from './store.js'
+import { saveMessages, touchConversation, updateConversation, type StoredMessage, isPathAllowed, UUID_RE } from './store.js'
 import type { AgentConfig } from './types.js'
 import { wsMessageSchema } from './types.js'
-import { requireApiKey, validateApiKey } from './auth.js'
+import { requireApiKey, validateApiKey, isAuthEnabled } from './auth.js'
 
 const app = express()
 
@@ -21,6 +21,15 @@ const wss = new WebSocketServer({
   server,
   path: '/ws',
   maxPayload: 1024 * 1024, // 1MB 限制
+  verifyClient: (info, callback) => {
+    const origin = info.origin || info.req.headers.origin
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(true)
+    } else {
+      logger.warn({ origin }, 'WebSocket rejected: disallowed origin')
+      callback(false, 403, 'Forbidden')
+    }
+  },
 })
 
 const PORT = parseInt(process.env.PORT || '18765', 10)
@@ -91,13 +100,19 @@ function sanitizeLogData(str: string): string {
     .replace(/"secret"\s*:\s*"[^"]*"/gi, '"secret":"[REDACTED]"')
 }
 
+const MAX_BUFFERED_AMOUNT = 1024 * 1024 // 1MB backpressure threshold
+
 function safeSend(ws: WebSocket, data: unknown): void {
   if (ws.readyState === WebSocket.OPEN) {
+    if (ws.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+      logger.warn('WebSocket send buffer full, terminating connection')
+      ws.terminate()
+      return
+    }
     try {
       ws.send(JSON.stringify(data))
     } catch (err) {
       logger.error({ err, dataType: typeof data }, 'Failed to stringify WebSocket message')
-      // 尝试发送简化错误信息
       try {
         ws.send(JSON.stringify({ type: 'error', data: 'Message serialization failed' }))
       } catch {
@@ -122,7 +137,10 @@ wss.on('connection', (ws: WebSocket) => {
 
   let sdkSessionId: string | undefined = undefined
 
+  let isProcessing = false
+
   let conversationHistory: { role: 'user' | 'assistant', content: string, timestamp?: number }[] = []
+  const MAX_HISTORY = 100
 
   // WebSocket 消息速率限制
   let msgCount = 0
@@ -149,7 +167,7 @@ wss.on('connection', (ws: WebSocket) => {
 
   logger.info({ sessionId }, 'WebSocket connected')
 
-  safeSend(ws, { type: 'connected', data: { sessionId } })
+  safeSend(ws, { type: 'connected', data: { sessionId, protocolVersion: 1 } })
 
   ws.on('message', async (data: Buffer) => {
     // 速率检查
@@ -193,7 +211,6 @@ wss.on('connection', (ws: WebSocket) => {
 
       switch (message.type) {
         case 'init': {
-          clearTimeout(initTimeout)
           const { workDir, apiKey } = message.data || {}
 
           // WebSocket 认证
@@ -203,14 +220,20 @@ wss.on('connection', (ws: WebSocket) => {
             return
           }
 
+          // workDir 必填校验
+          if (!workDir) {
+            safeSend(ws, { type: 'error', data: 'workDir is required', sessionId })
+            return
+          }
+
           // 路径安全检查
-          if (workDir && !isPathAllowed(workDir)) {
+          if (!isPathAllowed(workDir)) {
             safeSend(ws, { type: 'error', data: 'Work directory not allowed', sessionId })
             return
           }
 
           const config: AgentConfig = {
-            workDir: workDir ?? '',
+            workDir,
             env: {
               ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || '',
               ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || '',
@@ -219,6 +242,9 @@ wss.on('connection', (ws: WebSocket) => {
 
           await agentService.createSession(sessionId, config)
           isInitialized = true
+
+          // 认证和初始化成功后才清除超时
+          clearTimeout(initTimeout)
 
           logger.info({ sessionId, workDir }, 'Session initialized')
           safeSend(ws, { type: 'initialized', data: { sessionId } })
@@ -231,6 +257,12 @@ wss.on('connection', (ws: WebSocket) => {
             return
           }
 
+          if (isProcessing) {
+            safeSend(ws, { type: 'error', data: 'A prompt is already being processed', sessionId })
+            return
+          }
+          isProcessing = true
+
           const { prompt, workDir, conversationId, history, sdkSessionId: existingSdkSessionId } = message.data
 
           // 路径安全检查
@@ -240,6 +272,12 @@ wss.on('connection', (ws: WebSocket) => {
           }
 
           currentConversationId = conversationId || null
+
+          // UUID 格式校验
+          if (conversationId && !UUID_RE.test(conversationId)) {
+            safeSend(ws, { type: 'error', data: 'Invalid conversation ID format', sessionId })
+            return
+          }
 
           if (history && Array.isArray(history)) {
             conversationHistory = history
@@ -268,6 +306,9 @@ wss.on('connection', (ws: WebSocket) => {
             content: prompt,
             timestamp: Date.now(),
           })
+          if (conversationHistory.length > MAX_HISTORY) {
+            conversationHistory = conversationHistory.slice(-MAX_HISTORY)
+          }
 
           const userMsg: StoredMessage = {
             id: `${Date.now()}-user`,
@@ -312,6 +353,9 @@ wss.on('connection', (ws: WebSocket) => {
                   content,
                   timestamp: Date.now(),
                 })
+                if (conversationHistory.length > MAX_HISTORY) {
+                  conversationHistory = conversationHistory.slice(-MAX_HISTORY)
+                }
               }
 
               messageAccumulator.push({
@@ -325,15 +369,18 @@ wss.on('connection', (ws: WebSocket) => {
 
               // 增量保存：每积累 5 条消息保存一次
               if (currentConversationId && messageAccumulator.length >= 5) {
-                // 使用splice原子性操作避免竞态条件
-                const msgsToSave = messageAccumulator.splice(0, messageAccumulator.length)
+                const msgsToSave = [...messageAccumulator]
+                messageAccumulator.length = 0
                 saveMessages(currentConversationId, msgsToSave).catch(err => {
                   logger.error({ err, conversationId: currentConversationId }, 'Failed to save messages (incremental)')
+                  // 保存失败时恢复消息
+                  messageAccumulator.unshift(...msgsToSave)
                 })
               }
             }
 
             if (msg.type === 'done') {
+              isProcessing = false
               const doneData = msg.data as Record<string, unknown> | null
               if (doneData?.sdkSessionId && typeof doneData.sdkSessionId === 'string') {
                 sdkSessionId = doneData.sdkSessionId
@@ -390,6 +437,7 @@ wss.on('connection', (ws: WebSocket) => {
           safeSend(ws, { type: 'error', data: `Unknown message type`, sessionId })
       }
     } catch (error) {
+      isProcessing = false
       logger.error({ err: error, sessionId }, 'WebSocket message error')
       safeSend(ws, {
         type: 'error',
@@ -449,26 +497,29 @@ async function shutdown(signal: string) {
 
   logger.info({ signal }, 'Shutting down...')
 
+  // 关闭 WebSocket 服务器，不再接受新连接
+  wss.close()
+
   // 等待所有WebSocket连接优雅关闭
-  const closePromises = Array.from(wss.clients).map(ws => 
+  const closePromises = Array.from(wss.clients).map(ws =>
     new Promise<void>((resolve) => {
       if (ws.readyState === WebSocket.CLOSED) {
         resolve()
         return
       }
-      
+
       // 设置关闭超时
       const timeout = setTimeout(() => {
         logger.warn('WebSocket close timeout, terminating')
         ws.terminate()
         resolve()
       }, 2000)
-      
+
       ws.once('close', () => {
         clearTimeout(timeout)
         resolve()
       })
-      
+
       ws.close()
     })
   )
@@ -499,4 +550,7 @@ process.on('SIGINT', () => void shutdown('SIGINT'))
 
 server.listen(PORT, () => {
   logger.info({ port: PORT }, 'Server started')
+  if (!isAuthEnabled()) {
+    logger.warn('⚠ API_KEY not set — running without authentication. Set API_KEY in .env for production use.')
+  }
 })

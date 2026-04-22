@@ -132,7 +132,7 @@ router.post('/conversations', asyncHandler(async (req: Request, res: Response) =
  * @status 404 - 会话不存在
  */
 router.get('/conversations/:id', asyncHandler(async (req: Request, res: Response) => {
-  const conv = await getConversation(req.params.id)
+  const conv = await getConversation(req.params.id!)
   if (!conv) { res.status(404).json({ error: 'Conversation not found' }); return }
   res.json(conv)
 }))
@@ -151,7 +151,7 @@ router.get('/conversations/:id', asyncHandler(async (req: Request, res: Response
 router.patch('/conversations/:id', asyncHandler(async (req: Request, res: Response) => {
   const parsed = updateConversationSchema.safeParse(req.body)
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues.map(i => i.message).join(', ') }); return }
-  const conv = await updateConversation(req.params.id, parsed.data)
+  const conv = await updateConversation(req.params.id!, parsed.data)
   if (!conv) { res.status(404).json({ error: 'Conversation not found' }); return }
   res.json(conv)
 }))
@@ -168,9 +168,9 @@ router.patch('/conversations/:id', asyncHandler(async (req: Request, res: Respon
  * @status 404 - 会话不存在
  */
 router.delete('/conversations/:id', asyncHandler(async (req: Request, res: Response) => {
-  const ok = await deleteConversation(req.params.id)
+  const ok = await deleteConversation(req.params.id!)
   if (!ok) { res.status(404).json({ error: 'Conversation not found' }); return }
-  logger.info({ convId: req.params.id }, 'DELETE /conversations/:id')
+  logger.info({ convId: req.params.id! }, 'DELETE /conversations/:id')
   res.json({ success: true })
 }))
 
@@ -184,9 +184,9 @@ router.delete('/conversations/:id', asyncHandler(async (req: Request, res: Respo
  * @status 404 - 会话不存在
  */
 router.get('/conversations/:id/messages', asyncHandler(async (req: Request, res: Response) => {
-  const conv = await getConversation(req.params.id)
+  const conv = await getConversation(req.params.id!)
   if (!conv) { res.status(404).json({ error: 'Conversation not found' }); return }
-  res.json(await loadMessages(req.params.id))
+  res.json(await loadMessages(req.params.id!))
 }))
 
 // ============================================
