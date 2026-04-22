@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'fs'
 import { resolve, join } from 'path'
 import { homedir } from 'os'
 import { query, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -11,25 +10,6 @@ interface SessionData {
   sdkSessionId?: string
   history: HistoryMessage[]
   abortController?: AbortController
-}
-
-const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'TERM', 'SHELL', 'TMPDIR', 'USER']
-
-function loadMcpConfig(): Record<string, unknown> | null {
-  const mcpPath = join(homedir(), '.claude', 'mcp.json')
-  if (!existsSync(mcpPath)) return null
-  try {
-    const data = JSON.parse(readFileSync(mcpPath, 'utf-8'))
-    return data.mcpServers || null
-  } catch (err) {
-    logger.warn({ err, path: mcpPath }, 'Failed to load MCP config')
-    return null
-  }
-}
-
-const mcpServers = loadMcpConfig()
-if (mcpServers) {
-  logger.info({ serverNames: Object.keys(mcpServers) }, 'Loaded MCP servers from ~/.claude/mcp.json')
 }
 
 export class AgentService {
@@ -92,12 +72,10 @@ export class AgentService {
     history?: HistoryMessage[]
   ): Promise<void> {
     const stored = this.sessions.get(sessionId)
-    const mergedConfig = stored?.config ?? config
+    const baseConfig = stored?.config ?? config
+    const mergedConfig = { ...baseConfig, ...config }
 
-    const env: Record<string, string | undefined> = {}
-    for (const key of SAFE_ENV_KEYS) {
-      env[key] = process.env[key]
-    }
+    const env: Record<string, string | undefined> = { ...process.env }
     if (mergedConfig.env) {
       Object.assign(env, mergedConfig.env)
     }
@@ -134,14 +112,14 @@ export class AgentService {
       cwd: mergedConfig.workDir,
       env,
       allowedTools: mergedConfig.allowedTools || ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep'],
-      permissionMode: mergedConfig.permissionMode || 'acceptEdits',
+      permissionMode: mergedConfig.permissionMode || 'bypassPermissions',
       maxTurns: mergedConfig.maxTurns || 50,
       persistSession: true,
       includePartialMessages: true,
-      // 加载用户本地 Claude Code 配置（模型、环境变量、权限、MCP 服务器等）
       settingSources: ['user', 'project'],
-      // MCP 服务器配置
-      mcpServers: mcpServers || undefined,
+      stderr: (data: string) => {
+        logger.error({ sessionId, stderr: data.trim() }, 'Claude process stderr')
+      },
     }
 
     if (mergedConfig.sdkSessionId) {
@@ -158,7 +136,6 @@ export class AgentService {
       hasHistory: !!history && history.length > 0,
       historyLength: history?.length || 0,
       resumeSession: !!mergedConfig.sdkSessionId,
-      mcpServerCount: mcpServers ? Object.keys(mcpServers).length : 0,
     }, 'Starting agent stream')
 
     // 使用Map存储工具调用，避免数组顺序问题

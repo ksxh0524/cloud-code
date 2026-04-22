@@ -232,12 +232,13 @@ wss.on('connection', (ws: WebSocket) => {
             return
           }
 
+          const env: Record<string, string> = {}
+          if (process.env.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL
+          if (process.env.ANTHROPIC_AUTH_TOKEN) env.ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN
+
           const config: AgentConfig = {
             workDir,
-            env: {
-              ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || '',
-              ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || '',
-            },
+            env,
           }
 
           await agentService.createSession(sessionId, config)
