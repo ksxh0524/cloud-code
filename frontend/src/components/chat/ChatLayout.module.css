@@ -193,6 +193,41 @@
 .headerActions {
   display: flex;
   gap: var(--space-sm);
+  align-items: center;
+}
+
+.headerConnectionStatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.headerStatusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.headerConnected {
+  background: var(--color-success);
+}
+
+.headerDisconnected {
+  background: #ccc;
+}
+
+.headerReconnecting {
+  background: var(--color-warning);
+  animation: pulse 1.5s infinite;
+}
+
+.headerStatusText {
+  white-space: nowrap;
 }
 
 .interruptBtn {

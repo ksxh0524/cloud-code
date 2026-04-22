@@ -163,6 +163,27 @@ export function ChatLayout(props: ChatLayoutProps) {
             {currentConversation ? currentConversation.name : 'Cloud Code'}
           </div>
           <div className={styles.headerActions}>
+            {/* 连接状态指示器 */}
+            <div className={styles.headerConnectionStatus}>
+              <span
+                className={`${styles.headerStatusDot} ${
+                  isConnected
+                    ? styles.headerConnected
+                    : connectionState === 'reconnecting'
+                      ? styles.headerReconnecting
+                      : styles.headerDisconnected
+                }`}
+              />
+              <span className={styles.headerStatusText}>
+                {isConnected
+                  ? '已连接'
+                  : connectionState === 'reconnecting'
+                    ? '重连中'
+                    : connectionState === 'connecting'
+                      ? '连接中'
+                      : '未连接'}
+              </span>
+            </div>
             {isStreaming && (
               <button className={styles.interruptBtn} onClick={onInterrupt}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
