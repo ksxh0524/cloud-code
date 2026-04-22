@@ -67,7 +67,7 @@ export default function Settings() {
               <div className={styles.aboutCard}>
                 <div className={styles.aboutRow}>
                   <span className={styles.aboutLabel}>版本</span>
-                  <span className={styles.aboutValue}>1.0.0</span>
+                  <span className={styles.aboutValue}>0.0.1</span>
                 </div>
                 <div className={styles.aboutRow}>
                   <span className={styles.aboutLabel}>项目</span>
