@@ -144,10 +144,17 @@ export class AgentService {
 
     // 逐行读取 NDJSON 输出
     const rl = createInterface({ input: proc.stdout! })
+    let lineCount = 0
     rl.on('line', (line) => {
       if (!line.trim()) return
       try {
         const msg = JSON.parse(line) as Record<string, unknown>
+        lineCount++
+        const msgType = msg.type as string
+
+        if (lineCount <= 3) {
+          logger.debug({ sessionId, lineCount, msgType }, 'CLI output line')
+        }
 
         // 捕获 session_id
         if (msg.session_id && typeof msg.session_id === 'string') {
@@ -202,7 +209,7 @@ export class AgentService {
         }
 
         onMessage({ type: 'done', data: { sdkSessionId }, sessionId })
-        logger.info({ sessionId, sdkSessionId, exitCode: code }, 'CLI stream completed')
+        logger.info({ sessionId, sdkSessionId, exitCode: code, lineCount }, 'CLI stream completed')
         resolve()
       })
 
@@ -395,7 +402,15 @@ export class AgentService {
     const session = this.sessions.get(sessionId)
     if (!session) return
     if (session.process && !session.process.killed) {
+      // 先发 SIGINT 让 CLI 优雅中断
       session.process.kill('SIGINT')
+      // 如果 3 秒后还没退出，强杀
+      const proc = session.process
+      setTimeout(() => {
+        if (!proc.killed) {
+          proc.kill('SIGKILL')
+        }
+      }, 3000)
     }
   }
 }

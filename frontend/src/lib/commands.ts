@@ -17,7 +17,7 @@ export function parseSlashCommand(input: string): { command: string; args: strin
   const trimmed = input.trim()
   if (!trimmed.startsWith('/')) return null
   const parts = trimmed.split(/\s+/)
-  const command = parts[0].toLowerCase()
+  const command = parts[0]!.toLowerCase()
   const args = parts.slice(1).join(' ')
   return { command, args }
 }

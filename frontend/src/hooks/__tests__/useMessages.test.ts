@@ -72,7 +72,7 @@ describe('useMessages', () => {
     })
 
     expect(result.current.messages).toHaveLength(1)
-    expect(result.current.messages[0].content).toBe('Hello World')
+    expect(result.current.messages[0]!.content).toBe('Hello World')
   })
 
   it('should replace streaming content with complete message', () => {
@@ -93,7 +93,7 @@ describe('useMessages', () => {
     })
 
     expect(result.current.messages).toHaveLength(1)
-    expect(result.current.messages[0].content).toBe('Complete message')
+    expect(result.current.messages[0]!.content).toBe('Complete message')
   })
 
   it('should handle thinking messages', () => {
@@ -107,8 +107,8 @@ describe('useMessages', () => {
     })
 
     expect(result.current.messages).toHaveLength(1)
-    expect(result.current.messages[0].type).toBe('thinking')
-    expect(result.current.messages[0].content).toBe('Thinking about this...')
+    expect(result.current.messages[0]!.type).toBe('thinking')
+    expect(result.current.messages[0]!.content).toBe('Thinking about this...')
   })
 
   it('should handle tool_call messages', () => {
@@ -122,8 +122,8 @@ describe('useMessages', () => {
     })
 
     expect(result.current.messages).toHaveLength(1)
-    expect(result.current.messages[0].type).toBe('tool_use')
-    expect(result.current.messages[0].metadata?.toolName).toBe('Bash')
+    expect(result.current.messages[0]!.type).toBe('tool_use')
+    expect(result.current.messages[0]!.metadata?.toolName).toBe('Bash')
   })
 
   it('should merge tool_result into existing tool_use', () => {
@@ -144,7 +144,7 @@ describe('useMessages', () => {
     })
 
     expect(result.current.messages).toHaveLength(1)
-    expect(result.current.messages[0].metadata?.toolOutput).toBe('file1.txt\nfile2.txt')
+    expect(result.current.messages[0]!.metadata?.toolOutput).toBe('file1.txt\nfile2.txt')
   })
 
   it('should handle done message', () => {
@@ -177,8 +177,8 @@ describe('useMessages', () => {
     })
 
     expect(result.current.messages).toHaveLength(1)
-    expect(result.current.messages[0].role).toBe('system')
-    expect(result.current.messages[0].content).toContain('Something went wrong')
+    expect(result.current.messages[0]!.role).toBe('system')
+    expect(result.current.messages[0]!.content).toContain('Something went wrong')
     expect(result.current.isStreaming).toBe(false)
   })
 
@@ -210,8 +210,8 @@ describe('useMessages', () => {
 
     const history = result.current.getHistoryForPrompt()
     expect(history).toHaveLength(2) // user + assistant, thinking excluded
-    expect(history[0].role).toBe('user')
-    expect(history[1].role).toBe('assistant')
+    expect(history[0]!.role).toBe('user')
+    expect(history[1]!.role).toBe('assistant')
   })
 
   it('should filter messages by sessionId', () => {

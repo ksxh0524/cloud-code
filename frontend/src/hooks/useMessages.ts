@@ -107,7 +107,7 @@ export function useMessages(_conversationId: string | null) {
             const idx = prev.findIndex(m => m.id === streamingId)
             if (idx !== -1) {
               const updated = [...prev]
-              updated[idx] = { ...updated[idx], content: newContent }
+              updated[idx] = { ...updated[idx]!, content: newContent }
               return updated
             }
             return prev
@@ -127,7 +127,7 @@ export function useMessages(_conversationId: string | null) {
             if (idx !== -1) {
               const updated = [...prev]
               updated[idx] = {
-                ...updated[idx],
+                ...updated[idx]!,
                 role: msg.data.role as Message['role'],
                 content: msg.data.content,
                 type: msg.data.type as Message['type'],
@@ -197,9 +197,9 @@ export function useMessages(_conversationId: string | null) {
           if (idx !== -1) {
             const updated = [...prev]
             updated[idx] = {
-              ...updated[idx],
+              ...updated[idx]!,
               metadata: {
-                ...updated[idx].metadata,
+                ...updated[idx]!.metadata,
                 toolOutput: msg.data.toolOutput,
               },
             }

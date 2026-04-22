@@ -73,7 +73,7 @@ export const wsPromptSchema = z.object({
       content: z.string(),
       timestamp: z.number().optional(),
     })).optional(),
-    sdkSessionId: z.string().optional(),
+    sdkSessionId: z.string().nullable().optional(),
   }).merge(agentConfigPartial),
 })
 
