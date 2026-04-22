@@ -336,4 +336,14 @@
       padding-top: max(12px, env(safe-area-inset-top));
     }
   }
+
+  /* Mobile: 隐藏 header 中的连接状态文本，只显示圆点 */
+  .headerConnectionStatus {
+    padding: 4px;
+    background: transparent;
+  }
+
+  .headerStatusText {
+    display: none;
+  }
 }
