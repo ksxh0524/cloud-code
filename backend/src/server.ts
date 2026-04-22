@@ -409,6 +409,7 @@ wss.on('connection', (ws: WebSocket) => {
                 messageAccumulator.length = 0
                 saveMessages(currentConversationId, msgsToSave).catch(err => {
                   logger.error({ err, conversationId: currentConversationId }, 'Failed to save messages')
+                  messageAccumulator.unshift(...msgsToSave)
                 })
                 // 更新会话的最后活动时间
                 touchConversation(currentConversationId).catch(err => {

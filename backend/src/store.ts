@@ -499,13 +499,35 @@ export async function loadMessages(conversationId: string): Promise<StoredMessag
  * @param messages - 要保存的消息列表
  * @returns Promise<void>
  */
-export async function saveMessages(conversationId: string, messages: StoredMessage[]): Promise<void> {
+// 消息文件写入锁，防止并发追加丢失
+const messageLocks = new Map<string, Promise<void>>()
+
+export async function saveMessages(conversationId: string, newMessages: StoredMessage[]): Promise<void> {
   validateConversationId(conversationId)
-  await mkdir(MESSAGES_DIR, { recursive: true })
-  const filePath = messageFilePath(conversationId)
-  const tmpPath = filePath + '.tmp'
-  await writeFile(tmpPath, JSON.stringify(messages, null, 2), 'utf-8')
-  await rename(tmpPath, filePath)
+
+  // 串行化同一会话的写入
+  const prev = messageLocks.get(conversationId) || Promise.resolve()
+  const next = prev.then(async () => {
+    await mkdir(MESSAGES_DIR, { recursive: true })
+    const filePath = messageFilePath(conversationId)
+    const tmpPath = filePath + '.tmp'
+
+    // 追加模式：先读取已有消息
+    let existing: StoredMessage[] = []
+    try {
+      const data = await readFileAsync(filePath, 'utf-8')
+      existing = JSON.parse(data)
+    } catch {
+      // 文件不存在，从空数组开始
+    }
+
+    const merged = [...existing, ...newMessages]
+    await writeFile(tmpPath, JSON.stringify(merged, null, 2), 'utf-8')
+    await rename(tmpPath, filePath)
+  })
+
+  messageLocks.set(conversationId, next.catch(() => {}))
+  await next
 }
 
 /**

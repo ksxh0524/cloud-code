@@ -236,7 +236,7 @@ describe('Store Module', () => {
       expect(loaded).toEqual([])
     })
 
-    it('should overwrite existing messages', async () => {
+    it('should append to existing messages', async () => {
       const conversationId = crypto.randomUUID()
 
       await saveMessages(conversationId, [
@@ -248,8 +248,9 @@ describe('Store Module', () => {
       ])
 
       const loaded = await loadMessages(conversationId)
-      expect(loaded).toHaveLength(1)
-      expect(loaded[0].content).toBe('Second')
+      expect(loaded).toHaveLength(2)
+      expect(loaded[0]!.content).toBe('First')
+      expect(loaded[1]!.content).toBe('Second')
     })
 
     it('should handle messages with metadata', async () => {
