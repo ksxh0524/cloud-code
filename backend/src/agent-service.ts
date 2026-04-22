@@ -224,7 +224,7 @@ export class AgentService {
       logger.error({ err: error, sessionId }, 'Stream error')
       onMessage({
         type: 'error',
-        data: error instanceof Error ? error.message : 'Unknown error',
+        data: { message: error instanceof Error ? error.message : 'Unknown error' },
         sessionId,
       })
     }
@@ -305,10 +305,15 @@ export class AgentService {
       for (const block of blocks) {
         if (block.type === 'tool_result') {
           const toolOutput = typeof block.content === 'string' ? block.content : JSON.stringify(block.content)
-          const pending = pendingTools.shift()
+          // 获取第一个 pending tool（按插入顺序）
+          const pendingEntries = Array.from(pendingTools.entries())
+          const firstPending = pendingEntries[0]
+          if (firstPending) {
+            pendingTools.delete(firstPending[0])
+          }
           results.push({
             type: 'tool_result',
-            data: { toolName: pending?.toolName || String(block.name || ''), toolOutput },
+            data: { toolName: firstPending?.[1]?.toolName || String(block.name || ''), toolOutput },
             sessionId,
           })
         }
